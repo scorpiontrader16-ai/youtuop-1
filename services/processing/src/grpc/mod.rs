@@ -13,10 +13,14 @@ use tracing::{info, instrument, warn};
 use crate::engine::{CorrelationEngine, SignalEngine};
 
 // ── Generated proto modules ───────────────────────────────────────────────
-/// ingestion.v1 types — declared first; processing.v1 references them
-/// via the extern_path configured in build.rs
-pub mod ingestion_v1 {
-    tonic::include_proto!("ingestion.v1");
+// Module structure MUST match prost's generated paths.
+// prost generates cross-package references as:
+//   super::super::ingestion::v1::MarketEvent
+// So ingestion::v1 must live at crate::grpc::ingestion::v1.
+pub mod ingestion {
+    pub mod v1 {
+        tonic::include_proto!("ingestion.v1");
+    }
 }
 
 pub mod processing_v1 {
@@ -26,7 +30,7 @@ pub mod processing_v1 {
         tonic::include_file_descriptor_set!("processing_descriptor");
 }
 
-use ingestion_v1::market_event::Data as EventData;
+use ingestion::v1::market_event::Data as EventData;
 use processing_v1::{
     processing_engine_service_server::{
         ProcessingEngineService, ProcessingEngineServiceServer,
@@ -37,7 +41,6 @@ use processing_v1::{
 };
 
 // ── Service struct ────────────────────────────────────────────────────────
-#[derive(Debug)]
 pub struct Engine {
     signal: SignalEngine,
     /// Reserved for time-series DB integration — used in ComputeCorrelation
@@ -90,7 +93,7 @@ impl ProcessingEngineService for Engine {
 
         Ok(Response::new(ProcessEventResponse {
             event_id:          event.event_id,
-            correlation_score: 0.0, // requires historical context
+            correlation_score: 0.0,
             primary_signal:    Some(signal),
             indicators,
             risk:              Some(default_risk_metrics()),
@@ -241,10 +244,8 @@ impl ProcessingEngineService for Engine {
 
 // ── Pure helpers ──────────────────────────────────────────────────────────
 
-/// Derive a trading signal from a single MarketEvent.
-/// RSI/MACD require a price series — use ExtractSignals for those.
 fn analyze_event(
-    event: &ingestion_v1::MarketEvent,
+    event: &ingestion::v1::MarketEvent,
 ) -> (Signal, HashMap<String, f64>) {
     let mut indicators = HashMap::new();
 
@@ -277,7 +278,7 @@ fn analyze_event(
         Some(EventData::Book(book)) => {
             let bid_vol: f64 = book.bids.iter().map(|l| l.quantity).sum();
             let ask_vol: f64 = book.asks.iter().map(|l| l.quantity).sum();
-            let total    = bid_vol + ask_vol;
+            let total     = bid_vol + ask_vol;
             let imbalance = if total > 0.0 { (bid_vol - ask_vol) / total } else { 0.0 };
 
             indicators.insert("order_book_imbalance".into(), imbalance);
@@ -297,7 +298,7 @@ fn analyze_event(
     let signal = Signal {
         direction:  direction as i32,
         strength,
-        confidence: 0.5, // production: derive from ML model
+        confidence: 0.5,
         reason,
     };
 
