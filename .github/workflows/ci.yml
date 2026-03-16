@@ -77,10 +77,10 @@ jobs:
             libssl-dev \
             cmake
 
-      - name: Setup Rust 1.77
+      - name: Setup Rust 1.85
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.77'
+          toolchain: '1.85.0'
           components: clippy
 
       - name: Cache Cargo
@@ -160,7 +160,6 @@ jobs:
         uses: azure/setup-kubectl@v3
 
       - name: Validate standard K8s manifests
-        # Skip: ScaledObject (KEDA CRD), ExternalSecret (ESO CRD), monitoring stack (Helm CRDs)
         run: |
           for f in $(find k8s -name "*.yaml" \
             ! -name "kustomization.yaml" \
@@ -175,7 +174,6 @@ jobs:
         uses: imranismail/setup-kustomize@v2
 
       - name: Validate kustomize overlays
-        # Only validate overlays (not base) because base includes KEDA CRDs
         run: |
           echo "→ Building production/ingestion overlay"
           kustomize build k8s/overlays/production/ingestion > /dev/null
