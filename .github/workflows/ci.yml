@@ -75,6 +75,8 @@ jobs:
             protobuf-compiler \
             pkg-config \
             libssl-dev \
+            libcurl4-openssl-dev \
+            libsasl2-dev \
             cmake
 
       - name: Setup Rust 1.85
