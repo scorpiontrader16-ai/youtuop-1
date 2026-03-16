@@ -15,6 +15,7 @@ pub enum EngineError {
 }
 
 // ─── Correlation Engine ──────────────────────────────────────
+#[derive(Debug)]
 pub struct CorrelationEngine {
     min_periods: usize,
 }
@@ -86,6 +87,7 @@ pub struct CorrelationResult {
 }
 
 // ─── Signal Engine ───────────────────────────────────────────
+#[derive(Debug)]
 pub struct SignalEngine;
 
 impl SignalEngine {
