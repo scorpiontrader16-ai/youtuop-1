@@ -1,4 +1,4 @@
-//! Processing Service — HTTP health/metrics + gRPC server
+//! Processing Service — HTTP health/metrics + gRPC server + Kafka consumer
 use std::net::SocketAddr;
 
 use tokio::signal;
@@ -37,6 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "starting processing service"
     );
 
+    // ── Shutdown channel ──────────────────────────────────────────────────
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
     // ── gRPC server ───────────────────────────────────────────────────────
     let grpc_addr: SocketAddr = format!("0.0.0.0:{}", config.grpc_port)
         .parse()
@@ -59,16 +62,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("gRPC server failed");
     });
 
+    // ── Kafka consumer ────────────────────────────────────────────────────
+    let consumer_config = consumer::ConsumerConfig::from_env();
+    match consumer::KafkaConsumer::new(consumer_config).await {
+        Ok(kafka) => {
+            let rx = shutdown_rx.clone();
+            tokio::spawn(async move {
+                kafka.run(rx).await;
+            });
+            info!("Kafka consumer started");
+        }
+        Err(e) => {
+            // Log but don't crash — service still serves gRPC without Kafka
+            tracing::warn!(
+                error = %e,
+                "Kafka consumer failed to start, continuing without it"
+            );
+        }
+    }
+    // shutdown_rx kept alive until end of main so the watch channel stays open
+    drop(shutdown_rx);
+
     // ── HTTP server (health + metrics) ────────────────────────────────────
     let metrics_addr: SocketAddr = format!("0.0.0.0:{}", config.metrics_port)
         .parse()
         .map_err(|e| format!("invalid metrics address: {e}"))?;
 
-    let shutdown = async {
+    let shutdown = async move {
         match signal::ctrl_c().await {
             Ok(())  => info!("shutdown signal received"),
             Err(e)  => tracing::error!(error = %e, "ctrl_c listener error"),
         }
+        // Signal consumer to stop
+        let _ = shutdown_tx.send(true);
     };
 
     run_http_server(metrics_addr, shutdown).await?;
@@ -76,6 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// ── HTTP server ───────────────────────────────────────────────────────────
 async fn run_http_server(
     addr: SocketAddr,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
@@ -97,6 +124,7 @@ async fn run_http_server(
     Ok(())
 }
 
+// ── Config ────────────────────────────────────────────────────────────────
 #[derive(Debug)]
 pub struct Config {
     pub grpc_port:        u16,
