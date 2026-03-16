@@ -4,10 +4,7 @@ kind: Kustomization
 namespace: platform
 
 resources:
-  - ../../../base/processing/service.yaml
-  - ../../../base/processing/deployment.yaml
-  - ../../../base/processing/scaledobject.yaml
-
+  - ../../../base/processing  # ✅ reference the directory, not the file
 patches:
   - target:
       kind: Deployment
