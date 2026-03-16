@@ -8,7 +8,7 @@ option go_package = "github.com/your-org/platform/services/ingestion/gen/process
 import "google/protobuf/timestamp.proto";
 import "ingestion/v1/events.proto";
 
-service ProcessingEngine {
+} service ProcessingEngineService
   rpc ProcessEvent(ProcessEventRequest)
       returns (ProcessEventResponse);
 
