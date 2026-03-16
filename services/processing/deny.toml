@@ -2,6 +2,7 @@
 version = 2
 ignore = [
   "RUSTSEC-2024-0436",  # paste - يصل عبر statrs 0.16 → nalgebra 0.29
+  "RUSTSEC-2025-0134",  # rustls-pemfile - يصل عبر tonic 0.12
 ]
 
 [licenses]
