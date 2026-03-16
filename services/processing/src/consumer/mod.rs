@@ -10,7 +10,6 @@ use prost::Message;
 use rdkafka::{
     config::ClientConfig,
     consumer::{CommitMode, Consumer, StreamConsumer},
-    message::BorrowedMessage,
     Message as KafkaMessage,
 };
 use tokio::time::sleep;
@@ -60,33 +59,30 @@ impl KafkaConsumer {
     /// Build the Kafka consumer and connect to the gRPC server.
     /// Retries the gRPC connection up to 5 times with backoff.
     pub async fn new(config: ConsumerConfig) -> Result<Self, Box<dyn std::error::Error>> {
-        // ── Kafka ──────────────────────────────────────────────────────────
         let consumer: StreamConsumer = ClientConfig::new()
-            .set("bootstrap.servers",       &config.brokers)
-            .set("group.id",                &config.group_id)
-            .set("enable.auto.commit",      "false")
-            .set("auto.offset.reset",       "earliest")
-            .set("session.timeout.ms",      "30000")
-            .set("max.poll.interval.ms",    "300000")
-            .set("fetch.max.bytes",         "10485760") // 10 MB
+            .set("bootstrap.servers",    &config.brokers)
+            .set("group.id",             &config.group_id)
+            .set("enable.auto.commit",   "false")
+            .set("auto.offset.reset",    "earliest")
+            .set("session.timeout.ms",   "30000")
+            .set("max.poll.interval.ms", "300000")
+            .set("fetch.max.bytes",      "10485760") // 10 MB
             .create()?;
 
         consumer.subscribe(&[&config.topic])?;
         info!(topic = %config.topic, brokers = %config.brokers, "Kafka consumer subscribed");
 
-        // ── gRPC client with retry ─────────────────────────────────────────
         let client = connect_with_retry(&config.processing_addr, 5).await?;
 
         Ok(Self { consumer, client, config })
     }
 
-    /// Main loop — runs until the provided shutdown future resolves.
+    /// Main loop — runs until the shutdown watch fires.
     pub async fn run(mut self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         info!("consumer loop started");
 
         loop {
             tokio::select! {
-                // Shutdown signal
                 _ = shutdown.changed() => {
                     if *shutdown.borrow() {
                         info!("consumer received shutdown signal");
@@ -94,7 +90,6 @@ impl KafkaConsumer {
                     }
                 }
 
-                // Next Kafka message
                 result = self.consumer.recv() => {
                     match result {
                         Err(e) => {
@@ -102,8 +97,19 @@ impl KafkaConsumer {
                             sleep(Duration::from_millis(500)).await;
                         }
                         Ok(msg) => {
-                            self.handle_message(&msg).await;
-                            // Manual commit after successful processing
+                            // Copy metadata + payload out of the borrowed message
+                            // BEFORE calling handle_message so the borrow on
+                            // self.consumer is released and we can pass &mut self.client
+                            let partition = msg.partition();
+                            let offset    = msg.offset();
+                            let topic     = msg.topic().to_string();
+                            let payload   = msg.payload().map(|p| p.to_vec());
+
+                            handle_message(
+                                &mut self.client,
+                                &topic, partition, offset, payload,
+                            ).await;
+
                             if let Err(e) = self.consumer.commit_message(&msg, CommitMode::Async) {
                                 warn!(error = %e, "commit failed");
                             }
@@ -115,60 +121,63 @@ impl KafkaConsumer {
 
         info!("consumer loop stopped");
     }
+} // ── end impl KafkaConsumer ───────────────────────────────────────────────
 
-    /// Deserialize the message payload and forward it to the gRPC server.
-    #[instrument(skip(self, msg), fields(
-        topic     = %msg.topic(),
-        partition = msg.partition(),
-        offset    = msg.offset(),
-    ))]
-    async fn handle_message(&mut self, msg: &BorrowedMessage<'_>) {
-        let payload = match msg.payload() {
-            Some(p) => p,
-            None => {
-                warn!("empty payload — skipping");
-                return;
-            }
-        };
+// ── Free functions ────────────────────────────────────────────────────────
+// These are intentionally outside the impl block so we can borrow
+// `client` and `consumer` independently inside the run loop.
 
-        // Decode protobuf-encoded MarketEvent
-        let event = match MarketEvent::decode(payload) {
-            Ok(e)  => e,
-            Err(e) => {
-                error!(error = %e, "protobuf decode failed");
-                return;
-            }
-        };
+/// Decode a protobuf payload and forward the MarketEvent via gRPC.
+#[instrument(skip(client, payload), fields(%topic, partition, offset))]
+async fn handle_message(
+    client:    &mut ProcessingEngineServiceClient<Channel>,
+    topic:     &str,
+    partition: i32,
+    offset:    i64,
+    payload:   Option<Vec<u8>>,
+) {
+    let bytes = match payload {
+        Some(b) if !b.is_empty() => b,
+        _ => {
+            warn!(%topic, partition, offset, "empty payload — skipping");
+            return;
+        }
+    };
 
-        info!(
-            event_id = %event.event_id,
-            symbol   = %event.symbol,
-            "forwarding event to processing engine"
-        );
+    let event = match MarketEvent::decode(bytes.as_slice()) {
+        Ok(e)  => e,
+        Err(e) => {
+            error!(error = %e, %topic, partition, offset, "protobuf decode failed");
+            return;
+        }
+    };
 
-        let request = ProcessEventRequest {
-            event:  Some(event),
-            config: Some(default_processing_config()),
-        };
+    info!(
+        event_id = %event.event_id,
+        symbol   = %event.symbol,
+        "forwarding event to processing engine"
+    );
 
-        match self.client.process_event(request).await {
-            Ok(response) => {
-                let r = response.into_inner();
-                info!(
-                    event_id          = %r.event_id,
-                    correlation_score = r.correlation_score,
-                    processing_us     = r.processing_us,
-                    "event processed successfully"
-                );
-            }
-            Err(e) => {
-                error!(error = %e, "gRPC process_event failed");
-            }
+    let request = ProcessEventRequest {
+        event:  Some(event),
+        config: Some(default_processing_config()),
+    };
+
+    match client.process_event(request).await {
+        Ok(response) => {
+            let r = response.into_inner();
+            info!(
+                event_id          = %r.event_id,
+                correlation_score = r.correlation_score,
+                processing_us     = r.processing_us,
+                "event processed successfully"
+            );
+        }
+        Err(e) => {
+            error!(error = %e, "gRPC process_event failed");
         }
     }
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────
 
 /// Connect to the gRPC server with exponential backoff.
 async fn connect_with_retry(
@@ -192,8 +201,7 @@ async fn connect_with_retry(
                     return Err(format!(
                         "failed to connect to {} after {} attempts: {}",
                         addr, max_retries, e
-                    )
-                    .into());
+                    ).into());
                 }
                 warn!(
                     addr,
@@ -214,12 +222,8 @@ async fn connect_with_retry(
 
 fn default_processing_config() -> ProcessingConfig {
     ProcessingConfig {
-        indicators:        vec![
-            "rsi".into(),
-            "macd".into(),
-            "correlation".into(),
-        ],
-        lookback_periods:  14,
+        indicators:       vec!["rsi".into(), "macd".into(), "correlation".into()],
+        lookback_periods: 14,
         include_sentiment: false,
     }
 }
