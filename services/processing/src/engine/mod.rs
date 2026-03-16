@@ -120,6 +120,9 @@ impl SignalEngine {
         Ok(100.0 - (100.0 / (1.0 + rs)))
     }
 
+    /// MACD = EMA(fast) − EMA(slow)
+    /// Signal = EMA(MACD line, signal_period)
+    /// Histogram = MACD − Signal
     pub fn macd(
         &self,
         prices: &[f64],
@@ -127,32 +130,62 @@ impl SignalEngine {
         slow: usize,
         signal_period: usize,
     ) -> Result<MacdResult, EngineError> {
-        if prices.len() < slow + signal_period {
+        let required = slow + signal_period;
+        if prices.len() < required {
             return Err(EngineError::InsufficientData {
-                required: slow + signal_period,
+                required,
                 got: prices.len(),
             });
         }
-        let ema_fast  = self.ema(prices, fast)?;
-        let ema_slow  = self.ema(prices, slow)?;
-        let macd_line = ema_fast - ema_slow;
+
+        // Build EMA series for fast and slow periods
+        let ema_fast_series = self.ema_series(prices, fast)?;
+        let ema_slow_series = self.ema_series(prices, slow)?;
+
+        // ema_fast_series.len() = prices.len() - fast + 1
+        // ema_slow_series.len() = prices.len() - slow + 1
+        // Align by trimming the extra leading values from the fast series
+        let offset = slow - fast;
+        let macd_series: Vec<f64> = ema_fast_series[offset..]
+            .iter()
+            .zip(ema_slow_series.iter())
+            .map(|(f, s)| f - s)
+            .collect();
+
+        // Signal line = EMA of MACD series over signal_period
+        let signal_series = self.ema_series(&macd_series, signal_period)?;
+
+        let macd_val   = *macd_series.last().expect("macd_series is non-empty");
+        let signal_val = *signal_series.last().expect("signal_series is non-empty");
+        let histogram  = macd_val - signal_val;
+
+        debug!(macd = macd_val, signal = signal_val, histogram, "macd computed");
+
         Ok(MacdResult {
-            macd:      macd_line,
-            signal:    macd_line * 0.2,
-            histogram: macd_line * 0.8,
+            macd:      macd_val,
+            signal:    signal_val,
+            histogram,
         })
     }
 
-    fn ema(&self, prices: &[f64], period: usize) -> Result<f64, EngineError> {
+    /// Returns the full EMA series starting from index `period - 1`.
+    fn ema_series(&self, prices: &[f64], period: usize) -> Result<Vec<f64>, EngineError> {
         if prices.len() < period {
-            return Err(EngineError::InsufficientData { required: period, got: prices.len() });
+            return Err(EngineError::InsufficientData {
+                required: period,
+                got: prices.len(),
+            });
         }
         let k = 2.0 / (period as f64 + 1.0);
+        // Seed with SMA of first `period` values
         let mut ema = prices[..period].iter().sum::<f64>() / period as f64;
+        let mut series = Vec::with_capacity(prices.len() - period + 1);
+        series.push(ema);
         for price in &prices[period..] {
             ema = price * k + ema * (1.0 - k);
+            series.push(ema);
         }
-        Ok(ema)
+        Ok(series)
     }
 }
 
@@ -203,5 +236,31 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![1.0, 2.0, 3.0];
         assert!(e.pearson_correlation(&a, &b).is_err());
+    }
+
+    #[test]
+    fn test_macd_structure() {
+        let e = SignalEngine::new();
+        // Need at least slow + signal_period = 26 + 9 = 35 points
+        let prices: Vec<f64> = (0..60).map(|i| 100.0 + (i as f64).sin() * 10.0).collect();
+        let result = e.macd(&prices, 12, 26, 9).expect("valid macd");
+        // histogram must equal macd - signal exactly
+        assert!((result.histogram - (result.macd - result.signal)).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_macd_insufficient_data() {
+        let e = SignalEngine::new();
+        let prices = vec![1.0; 10];
+        assert!(e.macd(&prices, 12, 26, 9).is_err());
+    }
+
+    #[test]
+    fn test_macd_uptrend_positive() {
+        let e = SignalEngine::new();
+        // Strong uptrend — MACD line should be positive
+        let prices: Vec<f64> = (0..60).map(|i| 100.0 + i as f64 * 2.0).collect();
+        let result = e.macd(&prices, 12, 26, 9).expect("valid macd");
+        assert!(result.macd > 0.0, "expected positive macd in uptrend, got {}", result.macd);
     }
 }
