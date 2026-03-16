@@ -1,6 +1,8 @@
 [advisories]
 version = 2
-ignore = []
+ignore = [
+  "RUSTSEC-2024-0436",  # paste - يصل عبر statrs 0.16 → nalgebra 0.29
+]
 
 [licenses]
 version = 2
@@ -12,6 +14,7 @@ allow = [
   "BSD-2-Clause",
   "BSD-3-Clause",
   "Unicode-DFS-2016",
+  "Unicode-3.0",
   "OpenSSL",
 ]
 confidence-threshold = 0.8
