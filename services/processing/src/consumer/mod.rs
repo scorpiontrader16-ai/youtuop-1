@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::message::Message;
@@ -24,7 +25,6 @@ impl RedpandaConsumer {
             .set("session.timeout.ms", "6000")
             .set("max.poll.interval.ms", "300000")
             .create()?;
-
         consumer.subscribe(&[topic])?;
         info!(brokers, group_id, topic, "Redpanda consumer ready");
         Ok(Self { consumer })
@@ -33,7 +33,6 @@ impl RedpandaConsumer {
     #[instrument(skip(self))]
     pub async fn consume_loop(&self) {
         let mut stream = self.consumer.stream();
-
         loop {
             match stream.next().await {
                 Some(Ok(msg)) => {
