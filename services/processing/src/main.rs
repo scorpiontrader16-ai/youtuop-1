@@ -9,6 +9,14 @@ mod engine;
 mod consumer;
 mod grpc;
 
+/// ingestion.v1 proto types — declared at crate root so prost's generated
+/// super::super::ingestion::v1 paths resolve correctly
+pub mod ingestion {
+    pub mod v1 {
+        tonic::include_proto!("ingestion.v1");
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::registry()
