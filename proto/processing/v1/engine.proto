@@ -2,8 +2,7 @@ syntax = "proto3";
 
 package processing.v1;
 
-// FIX: go_package must point to processing gen directory, not ingestion
-option go_package = "github.com/your-org/platform/services/ingestion/gen/processing/v1;processingv1";
+option go_package = "github.com/aminpola2001-ctrl/youtuop/gen/processing/v1;processingv1";
 
 import "google/protobuf/timestamp.proto";
 import "events/v1/event.proto";
@@ -11,25 +10,22 @@ import "events/v1/event.proto";
 service ProcessingEngineService {
   rpc ProcessEvent(ProcessEventRequest)
       returns (ProcessEventResponse);
-
   rpc ProcessStream(stream ProcessEventRequest)
       returns (stream ProcessEventResponse);
-
   rpc ComputeCorrelation(CorrelationRequest)
       returns (CorrelationResponse);
-
   rpc ExtractSignals(SignalRequest)
       returns (SignalResponse);
 }
 
 message ProcessEventRequest {
-  ingestion.v1.MarketEvent event  = 1;
-  ProcessingConfig         config = 2;
+  events.v1.BaseEvent event  = 1;
+  ProcessingConfig    config = 2;
 }
 
 message ProcessingConfig {
-  repeated string indicators       = 1;
-  int32           lookback_periods = 2;
+  repeated string indicators        = 1;
+  int32           lookback_periods  = 2;
   bool            include_sentiment = 3;
 }
 
@@ -44,7 +40,12 @@ message ProcessEventResponse {
 }
 
 message Signal {
-  enum Direction { UNKNOWN = 0; BULLISH = 1; BEARISH = 2; NEUTRAL = 3; }
+  enum Direction {
+    UNKNOWN = 0;
+    BULLISH = 1;
+    BEARISH = 2;
+    NEUTRAL = 3;
+  }
   Direction direction  = 1;
   double    strength   = 2;
   double    confidence = 3;
@@ -66,11 +67,11 @@ message CorrelationRequest {
 }
 
 message CorrelationResponse {
-  string symbol_a        = 1;
-  string symbol_b        = 2;
-  double coefficient     = 3;
-  double p_value         = 4;
-  bool   is_significant  = 5;
+  string symbol_a       = 1;
+  string symbol_b       = 2;
+  double coefficient    = 3;
+  double p_value        = 4;
+  bool   is_significant = 5;
 }
 
 message SignalRequest {
