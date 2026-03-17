@@ -3,6 +3,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use metrics::{counter, gauge};
 use prost::Message;
 use rdkafka::{
     config::ClientConfig,
@@ -18,7 +19,6 @@ use crate::grpc::processing_v1::{
     ProcessEventRequest, ProcessingConfig,
 };
 use crate::ingestion::v1::MarketEvent;
-use crate::Metrics;
 
 // ── Circuit Breaker ───────────────────────────────────────────────────────
 
@@ -30,29 +30,27 @@ enum CbState {
 }
 
 struct CircuitBreaker {
-    state:               CbState,
+    state:                CbState,
     consecutive_failures: u32,
-    failure_threshold:   u32,
-    last_failure:        Option<Instant>,
-    timeout:             Duration,
+    failure_threshold:    u32,
+    last_failure:         Option<Instant>,
+    timeout:              Duration,
 }
 
 impl CircuitBreaker {
     fn new(failure_threshold: u32, timeout: Duration) -> Self {
         Self {
-            state: CbState::Closed,
+            state:                CbState::Closed,
             consecutive_failures: 0,
             failure_threshold,
-            last_failure: None,
+            last_failure:         None,
             timeout,
         }
     }
 
-    /// Returns true if the call is allowed.
     fn allow(&mut self) -> bool {
         match self.state {
-            CbState::Closed   => true,
-            CbState::HalfOpen => true,
+            CbState::Closed | CbState::HalfOpen => true,
             CbState::Open => {
                 if let Some(t) = self.last_failure {
                     if t.elapsed() >= self.timeout {
@@ -78,15 +76,16 @@ impl CircuitBreaker {
     fn on_failure(&mut self) {
         self.consecutive_failures += 1;
         self.last_failure          = Some(Instant::now());
-        if self.consecutive_failures >= self.failure_threshold {
-            if self.state != CbState::Open {
-                warn!(
-                    failures = self.consecutive_failures,
-                    "circuit breaker → open"
-                );
-            }
+        if self.consecutive_failures >= self.failure_threshold
+            && self.state != CbState::Open
+        {
+            warn!(failures = self.consecutive_failures, "circuit breaker → open");
             self.state = CbState::Open;
         }
+    }
+
+    fn is_open(&self) -> bool {
+        self.state == CbState::Open
     }
 }
 
@@ -119,15 +118,13 @@ pub struct KafkaConsumer {
     consumer:        StreamConsumer,
     client:          ProcessingEngineServiceClient<Channel>,
     circuit_breaker: Arc<Mutex<CircuitBreaker>>,
-    metrics:         Arc<Metrics>,
     #[allow(dead_code)]
     config:          ConsumerConfig,
 }
 
 impl KafkaConsumer {
     pub async fn new(
-        config:  ConsumerConfig,
-        metrics: Arc<Metrics>,
+        config: ConsumerConfig,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let consumer: StreamConsumer = ClientConfig::new()
             .set("bootstrap.servers",    &config.brokers)
@@ -143,12 +140,11 @@ impl KafkaConsumer {
         info!(topic = %config.topic, brokers = %config.brokers, "Kafka consumer subscribed");
 
         let client = connect_with_retry(&config.processing_addr, 5).await?;
-
         let circuit_breaker = Arc::new(Mutex::new(
             CircuitBreaker::new(5, Duration::from_secs(30))
         ));
 
-        Ok(Self { consumer, client, circuit_breaker, metrics, config })
+        Ok(Self { consumer, client, circuit_breaker, config })
     }
 
     pub async fn run(mut self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
@@ -167,9 +163,7 @@ impl KafkaConsumer {
                     match result {
                         Err(e) => {
                             error!(error = %e, "kafka receive error");
-                            self.metrics.kafka_errors_total
-                                .with_label_values(&["receive"])
-                                .inc();
+                            counter!("processing_kafka_errors_total", "type" => "receive").increment(1);
                             sleep(Duration::from_millis(500)).await;
                         }
                         Ok(msg) => {
@@ -185,10 +179,8 @@ impl KafkaConsumer {
 
                             if !allowed {
                                 warn!("circuit breaker open — dropping message");
-                                self.metrics.kafka_errors_total
-                                    .with_label_values(&["circuit_open"])
-                                    .inc();
-                                self.metrics.circuit_breaker_state.set(1.0);
+                                counter!("processing_kafka_errors_total", "type" => "circuit_open").increment(1);
+                                gauge!("processing_circuit_breaker_open").set(1.0);
                                 sleep(Duration::from_secs(1)).await;
                                 continue;
                             }
@@ -196,18 +188,17 @@ impl KafkaConsumer {
                             let success = handle_message(
                                 &mut self.client,
                                 &topic, partition, offset, payload,
-                                &self.metrics,
                             ).await;
 
                             {
                                 let mut cb = self.circuit_breaker.lock().unwrap();
                                 if success {
                                     cb.on_success();
-                                    self.metrics.circuit_breaker_state.set(0.0);
+                                    gauge!("processing_circuit_breaker_open").set(0.0);
                                 } else {
                                     cb.on_failure();
-                                    if cb.state == CbState::Open {
-                                        self.metrics.circuit_breaker_state.set(1.0);
+                                    if cb.is_open() {
+                                        gauge!("processing_circuit_breaker_open").set(1.0);
                                     }
                                 }
                             }
@@ -227,21 +218,20 @@ impl KafkaConsumer {
 
 // ── Free functions ────────────────────────────────────────────────────────
 
-#[instrument(skip(client, payload, metrics), fields(%topic, partition, offset))]
+#[instrument(skip(client, payload), fields(%topic, partition, offset))]
 async fn handle_message(
     client:    &mut ProcessingEngineServiceClient<Channel>,
     topic:     &str,
     partition: i32,
     offset:    i64,
     payload:   Option<Vec<u8>>,
-    metrics:   &Arc<Metrics>,
 ) -> bool {
     let bytes = match payload {
         Some(b) if !b.is_empty() => b,
         _ => {
             warn!(%topic, partition, offset, "empty payload — skipping");
-            metrics.kafka_messages_total.with_label_values(&["skipped"]).inc();
-            return true; // Not a failure — just empty
+            counter!("processing_kafka_messages_total", "status" => "skipped").increment(1);
+            return true;
         }
     };
 
@@ -249,17 +239,13 @@ async fn handle_message(
         Ok(e)  => e,
         Err(e) => {
             error!(error = %e, "protobuf decode failed");
-            metrics.kafka_errors_total.with_label_values(&["decode"]).inc();
-            metrics.kafka_messages_total.with_label_values(&["decode_error"]).inc();
+            counter!("processing_kafka_errors_total", "type" => "decode").increment(1);
+            counter!("processing_kafka_messages_total", "status" => "decode_error").increment(1);
             return false;
         }
     };
 
-    info!(
-        event_id = %event.event_id,
-        symbol   = %event.symbol,
-        "forwarding event to processing engine"
-    );
+    info!(event_id = %event.event_id, symbol = %event.symbol, "forwarding event");
 
     let request = ProcessEventRequest {
         event:  Some(event),
@@ -275,20 +261,20 @@ async fn handle_message(
                 processing_us     = r.processing_us,
                 "event processed successfully"
             );
-            metrics.kafka_messages_total.with_label_values(&["success"]).inc();
+            counter!("processing_kafka_messages_total", "status" => "success").increment(1);
             true
         }
         Err(e) => {
             error!(error = %e, "gRPC process_event failed");
-            metrics.kafka_errors_total.with_label_values(&["grpc"]).inc();
-            metrics.kafka_messages_total.with_label_values(&["grpc_error"]).inc();
+            counter!("processing_kafka_errors_total", "type" => "grpc").increment(1);
+            counter!("processing_kafka_messages_total", "status" => "grpc_error").increment(1);
             false
         }
     }
 }
 
 async fn connect_with_retry(
-    addr: &str,
+    addr:        &str,
     max_retries: u32,
 ) -> Result<ProcessingEngineServiceClient<Channel>, Box<dyn std::error::Error>> {
     let mut delay = Duration::from_secs(1);
@@ -310,10 +296,8 @@ async fn connect_with_retry(
                         addr, max_retries, e
                     ).into());
                 }
-                warn!(
-                    addr, attempt, max_retries,
-                    delay_secs = delay.as_secs(),
-                    error = %e,
+                warn!(addr, attempt, max_retries,
+                    delay_secs = delay.as_secs(), error = %e,
                     "gRPC connection failed, retrying"
                 );
                 sleep(delay).await;
