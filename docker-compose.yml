@@ -93,7 +93,7 @@ services:
     image: grafana/loki:2.9.4
     container_name: loki
     ports:
-      - "3100:3100"   # HTTP API + push endpoint
+      - "3100:3100"
     command: -config.file=/etc/loki/config.yaml
     volumes:
       - ./scripts/loki.yaml:/etc/loki/config.yaml:ro
@@ -113,7 +113,7 @@ services:
     container_name: mimir
     command: -config.file=/etc/mimir/config.yaml
     ports:
-      - "9009:9009"   # HTTP API + remote_write endpoint
+      - "9009:9009"
     volumes:
       - ./scripts/mimir.yaml:/etc/mimir/config.yaml:ro
       - mimir_data:/data/mimir
@@ -132,8 +132,8 @@ services:
     container_name: tempo
     command: -config.file=/etc/tempo/config.yaml
     ports:
-      - "3200:3200"   # HTTP API (query)
-      - "4319:4317"   # OTLP gRPC (host port avoids clash with otel-collector)
+      - "3200:3200"
+      - "4319:4317"   # OTLP gRPC (host 4319 avoids clash with otel-collector)
     volumes:
       - ./scripts/tempo.yaml:/etc/tempo/config.yaml:ro
       - tempo_data:/tmp/tempo
@@ -174,6 +174,38 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+    networks:
+      - platform
+
+  # ── Grafana — Dashboards ──────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.3.3
+    container_name: grafana
+    depends_on:
+      loki:
+        condition: service_healthy
+      mimir:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED:   "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE:  Admin
+      GF_AUTH_DISABLE_LOGIN_FORM:  "true"
+      GF_FEATURE_TOGGLES_ENABLE:   traceqlEditor
+    volumes:
+      - ./scripts/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./scripts/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./scripts/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - platform
 
@@ -251,6 +283,7 @@ volumes:
   loki_data:
   tempo_data:
   mimir_data:
+  grafana_data:
 
 # ── Networks ──────────────────────────────────────────────────────────────
 networks:
