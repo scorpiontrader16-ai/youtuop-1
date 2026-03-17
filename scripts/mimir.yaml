@@ -51,6 +51,10 @@ ruler_storage:
   filesystem:
     dir: /data/mimir/rules
 
+ruler:
+  alertmanager_url: http://alertmanager:9093/alertmanager
+  enable_api: true
+
 alertmanager_storage:
   backend: filesystem
   filesystem:
