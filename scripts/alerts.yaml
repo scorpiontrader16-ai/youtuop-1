@@ -1,0 +1,168 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Prometheus Alerting Rules — Platform
+# Loaded by Mimir ruler.
+# Covers: Ingestion Service (Go) + Processing Service (Rust)
+# ─────────────────────────────────────────────────────────────────────────────
+
+groups:
+
+  # ── Ingestion Service ────────────────────────────────────────────────────
+  - name: ingestion
+    interval: 30s
+    rules:
+
+      # ── RED: Rate ────────────────────────────────────────────────────────
+      - alert: IngestionNoTraffic
+        expr: sum(rate(ingestion_http_requests_total[5m])) == 0
+        for: 2m
+        labels:
+          severity: warning
+          service:  ingestion
+        annotations:
+          summary:     "Ingestion service receiving no traffic"
+          description: "No HTTP requests received in the last 5 minutes."
+          runbook:     "Check ingestion service logs and upstream connectivity."
+
+      # ── RED: Errors ──────────────────────────────────────────────────────
+      - alert: IngestionHighErrorRate
+        expr: |
+          sum(rate(ingestion_http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(ingestion_http_requests_total[5m]))
+          * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          service:  ingestion
+        annotations:
+          summary:     "Ingestion HTTP error rate > 5%"
+          description: "Error rate is {{ $value | printf \"%.2f\" }}%."
+          runbook:     "Check ingestion logs for 5xx errors."
+
+      # ── RED: Duration ────────────────────────────────────────────────────
+      - alert: IngestionHighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(ingestion_http_request_duration_seconds_bucket[5m]))
+            by (le, path)
+          ) * 1000 > 500
+        for: 5m
+        labels:
+          severity: warning
+          service:  ingestion
+        annotations:
+          summary:     "Ingestion P99 latency > 500ms"
+          description: "P99 latency for {{ $labels.path }} is {{ $value | printf \"%.0f\" }}ms."
+          runbook:     "Check downstream dependencies and database query times."
+
+      # ── Rate Limiting ────────────────────────────────────────────────────
+      - alert: IngestionRateLimitHigh
+        expr: rate(ingestion_rate_limit_rejected_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          service:  ingestion
+        annotations:
+          summary:     "Ingestion rate limiter rejecting > 10 req/s"
+          description: "Rate limit rejections: {{ $value | printf \"%.1f\" }} req/s."
+          runbook:     "Consider increasing rate limit or investigating traffic spike."
+
+      # ── Circuit Breaker ──────────────────────────────────────────────────
+      - alert: IngestionCircuitBreakerOpen
+        expr: ingestion_circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: critical
+          service:  ingestion
+        annotations:
+          summary:     "Circuit breaker OPEN for {{ $labels.name }}"
+          description: "The circuit breaker for {{ $labels.name }} has been open for > 1 minute."
+          runbook:     "Check connectivity to {{ $labels.name }} and upstream health."
+
+  # ── Processing Service ───────────────────────────────────────────────────
+  - name: processing
+    interval: 30s
+    rules:
+
+      # ── RED: Rate ────────────────────────────────────────────────────────
+      - alert: ProcessingNoTraffic
+        expr: sum(rate(processing_grpc_requests_total[5m])) == 0
+        for: 2m
+        labels:
+          severity: warning
+          service:  processing
+        annotations:
+          summary:     "Processing service receiving no gRPC traffic"
+          description: "No gRPC requests in the last 5 minutes."
+          runbook:     "Check processing service logs and Kafka consumer status."
+
+      # ── RED: Errors ──────────────────────────────────────────────────────
+      - alert: ProcessingHighErrorRate
+        expr: |
+          sum(rate(processing_grpc_requests_total{status="error"}[5m])) by (method)
+          /
+          sum(rate(processing_grpc_requests_total[5m])) by (method)
+          * 100 > 5
+        for: 2m
+        labels:
+          severity: critical
+          service:  processing
+        annotations:
+          summary:     "Processing gRPC error rate > 5% for {{ $labels.method }}"
+          description: "Error rate is {{ $value | printf \"%.2f\" }}% for {{ $labels.method }}."
+          runbook:     "Check processing service logs for gRPC errors."
+
+      # ── RED: Duration ────────────────────────────────────────────────────
+      - alert: ProcessingHighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(processing_grpc_duration_seconds_bucket[5m]))
+            by (le, method)
+          ) * 1000 > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service:  processing
+        annotations:
+          summary:     "Processing P99 gRPC latency > 1s for {{ $labels.method }}"
+          description: "P99 latency is {{ $value | printf \"%.0f\" }}ms for {{ $labels.method }}."
+          runbook:     "Check engine computation time and Kafka consumer lag."
+
+      # ── Kafka Consumer ───────────────────────────────────────────────────
+      - alert: ProcessingKafkaErrors
+        expr: |
+          sum(rate(processing_kafka_messages_total{status=~"decode_error|grpc_error"}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service:  processing
+        annotations:
+          summary:     "Processing Kafka consumer errors > 0.1/s"
+          description: "Kafka {{ $labels.status }}: {{ $value | printf \"%.2f\" }} errors/s."
+          runbook:     "Check Kafka message format and processing gRPC connectivity."
+
+      - alert: ProcessingKafkaNoMessages
+        expr: sum(rate(processing_kafka_messages_total{status="success"}[10m])) == 0
+        for: 5m
+        labels:
+          severity: warning
+          service:  processing
+        annotations:
+          summary:     "Processing Kafka consumer receiving no messages"
+          description: "No successful Kafka messages processed in 10 minutes."
+          runbook:     "Check Redpanda connectivity and topic market-events."
+
+  # ── Infrastructure ───────────────────────────────────────────────────────
+  - name: infrastructure
+    interval: 60s
+    rules:
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary:     "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} on {{ $labels.instance }} has been unreachable for 1 minute."
+          runbook:     "Check the service container logs with: docker compose logs {{ $labels.job }}"
