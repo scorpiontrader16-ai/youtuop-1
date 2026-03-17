@@ -1,0 +1,181 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Local Development Stack
+# Usage: make dev  (or: docker compose up -d)
+# ─────────────────────────────────────────────────────────────────────────────
+version: "3.9"
+
+services:
+
+  # ── Redpanda (Kafka-compatible) ───────────────────────────────────────────
+  redpanda:
+    image: redpandadata/redpanda:v23.3.11
+    container_name: redpanda
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr 0.0.0.0:8082
+      - --advertise-pandaproxy-addr redpanda:8082
+      - --schema-registry-addr 0.0.0.0:8081
+    ports:
+      - "9092:9092"   # Kafka API
+      - "8081:8081"   # Schema Registry
+      - "8082:8082"   # Pandaproxy (REST)
+      - "9644:9644"   # Admin API
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - platform
+
+  # ── Redpanda Console ──────────────────────────────────────────────────────
+  redpanda-console:
+    image: redpandadata/console:v2.4.3
+    container_name: redpanda-console
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      REDPANDA_ADMINAPI_ENABLED: "true"
+      REDPANDA_ADMINAPI_URLS: http://redpanda:9644
+    networks:
+      - platform
+
+  # ── Postgres ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER:     platform
+      POSTGRES_PASSWORD: platform
+      POSTGRES_DB:       platform
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - platform
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+    networks:
+      - platform
+
+  # ── OpenTelemetry Collector ───────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: otel-collector
+    ports:
+      - "4317:4317"   # gRPC receiver
+      - "4318:4318"   # HTTP receiver
+      - "8888:8888"   # Prometheus metrics (self)
+      - "8889:8889"   # Prometheus exporter
+    volumes:
+      - ./scripts/otel-collector.yaml:/etc/otel/config.yaml:ro
+    command: ["--config=/etc/otel/config.yaml"]
+    networks:
+      - platform
+
+  # ── Go Ingestion Service ──────────────────────────────────────────────────
+  ingestion:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile.arm64
+    container_name: ingestion
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      processing:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    ports:
+      - "8090:8080"   # gRPC
+      - "9091:9090"   # HTTP/metrics
+    environment:
+      GRPC_PORT:                    "8080"
+      HTTP_PORT:                    "9090"
+      REDPANDA_BROKERS:             redpanda:9092
+      PROCESSING_ADDR:              processing:50051
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+      RUST_LOG:                     info
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - platform
+
+  # ── Rust Processing Service ───────────────────────────────────────────────
+  processing:
+    build:
+      context: ./services/processing
+      dockerfile: Dockerfile.arm64
+    container_name: processing
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    ports:
+      - "50051:50051"  # gRPC
+      - "9093:9090"    # metrics
+    environment:
+      GRPC_PORT:                    "50051"
+      METRICS_PORT:                 "9090"
+      REDPANDA_BROKERS:             redpanda:9092
+      KAFKA_GROUP_ID:               processing-consumer
+      KAFKA_TOPIC:                  market-events
+      PROCESSING_ADDR:              http://processing:50051
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+      RUST_LOG:                     info
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    networks:
+      - platform
+
+# ── Volumes ───────────────────────────────────────────────────────────────
+volumes:
+  redpanda_data:
+  postgres_data:
+  redis_data:
+
+# ── Networks ──────────────────────────────────────────────────────────────
+networks:
+  platform:
+    driver: bridge
