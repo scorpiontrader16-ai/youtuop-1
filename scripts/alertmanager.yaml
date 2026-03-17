@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Alertmanager — Local Development Config
+# Routes all alerts to the console (log receiver).
+# In production: replace with Slack/PagerDuty/email receivers.
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: [alertname, service]
+  group_wait:      10s
+  group_interval:  5m
+  repeat_interval: 1h
+  receiver: console
+
+  routes:
+    # Critical alerts repeat more frequently
+    - match:
+        severity: critical
+      receiver: console
+      repeat_interval: 15m
+
+receivers:
+  - name: console
+    webhook_configs:
+      - url: http://localhost:9999/alerts
+        send_resolved: true
+
+inhibit_rules:
+  # Suppress warning if critical is already firing for same service
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: [service]
