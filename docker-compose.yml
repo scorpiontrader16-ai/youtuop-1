@@ -107,6 +107,25 @@ services:
     networks:
       - platform
 
+  # ── Mimir — Long-term metrics storage ─────────────────────────────────────
+  mimir:
+    image: grafana/mimir:2.11.0
+    container_name: mimir
+    command: -config.file=/etc/mimir/config.yaml
+    ports:
+      - "9009:9009"   # HTTP API + remote_write endpoint
+    volumes:
+      - ./scripts/mimir.yaml:/etc/mimir/config.yaml:ro
+      - mimir_data:/data/mimir
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9009/ready || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+    networks:
+      - platform
+
   # ── Tempo — Distributed tracing ───────────────────────────────────────────
   tempo:
     image: grafana/tempo:2.4.1
@@ -114,10 +133,13 @@ services:
     command: -config.file=/etc/tempo/config.yaml
     ports:
       - "3200:3200"   # HTTP API (query)
-      - "4319:4317"   # OTLP gRPC receiver (avoid clash with otel-collector:4317)
+      - "4319:4317"   # OTLP gRPC (host port avoids clash with otel-collector)
     volumes:
       - ./scripts/tempo.yaml:/etc/tempo/config.yaml:ro
       - tempo_data:/tmp/tempo
+    depends_on:
+      mimir:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3200/ready || exit 1"]
       interval: 10s
@@ -135,6 +157,8 @@ services:
       loki:
         condition: service_healthy
       tempo:
+        condition: service_healthy
+      mimir:
         condition: service_healthy
     ports:
       - "4317:4317"   # gRPC receiver
@@ -226,6 +250,7 @@ volumes:
   redis_data:
   loki_data:
   tempo_data:
+  mimir_data:
 
 # ── Networks ──────────────────────────────────────────────────────────────
 networks:
