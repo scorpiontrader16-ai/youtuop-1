@@ -2,16 +2,17 @@
 # OpenTelemetry Collector — Local Development
 #
 # Pipeline:
-#   Traces  → Tempo  (OTLP gRPC)
-#   Metrics → Mimir  (Prometheus remote_write)
-#   Logs    → Loki   (loki exporter)
+#   Traces  → OTLP receiver → batch → Tempo
+#   Metrics → OTLP receiver → batch → Prometheus (scrape) + Mimir (remote_write)
+#   Logs    → OTLP receiver → batch → Loki
 #
-# Receivers:  OTLP gRPC :4317 + HTTP :4318
-# Self-metrics exposed on :8888 (scraped by Mimir/Prometheus)
+# Services send to:
+#   gRPC: otel-collector:4317
+#   HTTP: otel-collector:4318
 # ─────────────────────────────────────────────────────────────────────────────
 
 receivers:
-  # ── OTLP — accepts traces, metrics, logs from all services ───────────────
+  # ── OTLP — receives from Go + Rust services ────────────────────────────
   otlp:
     protocols:
       grpc:
@@ -19,122 +20,103 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
-  # ── Prometheus scrape — scrapes collector's own metrics ──────────────────
+  # ── Prometheus scrape — scrapes processing service metrics ─────────────
   prometheus:
     config:
       scrape_configs:
-        - job_name: otel-collector
+        - job_name: processing
           scrape_interval: 15s
           static_configs:
-            - targets: ["localhost:8888"]
+            - targets: ["processing:9090"]
+              labels:
+                service: processing
+        - job_name: ingestion
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["ingestion:9090"]
+              labels:
+                service: ingestion
 
-# ─────────────────────────────────────────────────────────────────────────────
 processors:
-  # ── Batch — reduces export requests, improves throughput ─────────────────
+  # ── Batch — reduces network calls ──────────────────────────────────────
   batch:
     timeout: 1s
     send_batch_size: 1024
-    send_batch_max_size: 2048
 
-  # ── Memory limiter — prevents OOM under load ─────────────────────────────
+  # ── Memory limiter — prevents OOM under load ───────────────────────────
   memory_limiter:
     check_interval: 1s
-    limit_mib: 512
-    spike_limit_mib: 128
+    limit_mib: 256
+    spike_limit_mib: 64
 
-  # ── Resource detection — adds host/container metadata ────────────────────
-  resourcedetection:
-    detectors: [env, system]
-    timeout: 5s
-    override: false
-
-  # ── Resource attributes — add environment label to all telemetry ─────────
+  # ── Resource — adds environment attributes to all signals ──────────────
   resource:
     attributes:
       - key: deployment.environment
         value: local
         action: upsert
-      - key: service.namespace
-        value: platform
+      - key: platform
+        value: youtuop
         action: upsert
 
-# ─────────────────────────────────────────────────────────────────────────────
 exporters:
-  # ── Debug — human-readable output in collector logs ──────────────────────
+  # ── Debug — console output (basic verbosity in dev) ────────────────────
   debug:
     verbosity: basic
 
-  # ── Tempo — receives traces via OTLP gRPC ────────────────────────────────
+  # ── Tempo — receives traces via OTLP ──────────────────────────────────
   otlp/tempo:
     endpoint: tempo:4317
     tls:
       insecure: true
 
-  # ── Mimir — receives metrics via Prometheus remote_write ─────────────────
-  prometheusremotewrite/mimir:
-    endpoint: http://mimir:9009/api/v1/push
-    tls:
-      insecure: true
-    headers:
-      X-Scope-OrgID: platform
-    retry_on_failure:
-      enabled: true
-      initial_interval: 5s
-      max_interval: 30s
-      max_elapsed_time: 300s
-
-  # ── Loki — receives logs via loki exporter ───────────────────────────────
+  # ── Loki — receives logs ───────────────────────────────────────────────
   loki:
     endpoint: http://loki:3100/loki/api/v1/push
-    tls:
-      insecure: true
     default_labels_enabled:
       exporter: false
       job: true
       instance: true
       level: true
 
-# ─────────────────────────────────────────────────────────────────────────────
+  # ── Prometheus (self scrape endpoint) ─────────────────────────────────
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: otelcol
+
+  # ── Mimir — remote_write for long-term metrics storage ────────────────
+  prometheusremotewrite/mimir:
+    endpoint: http://mimir:9009/api/v1/push
+    tls:
+      insecure: true
+
 extensions:
-  # ── Health check — used by docker healthcheck ────────────────────────────
+  # ── Health check endpoint for docker healthcheck ───────────────────────
   health_check:
     endpoint: 0.0.0.0:13133
 
-  # ── pprof — performance profiling ────────────────────────────────────────
+  # ── pprof — Go-style profiling for the collector itself ────────────────
   pprof:
-    endpoint: 0.0.0.0:1888
+    endpoint: 0.0.0.0:1777
 
-  # ── zpages — live debug pages ─────────────────────────────────────────────
-  zpages:
-    endpoint: 0.0.0.0:55679
-
-# ─────────────────────────────────────────────────────────────────────────────
 service:
-  extensions: [health_check, pprof, zpages]
+  extensions: [health_check, pprof]
 
   pipelines:
-    # ── Traces → Tempo ───────────────────────────────────────────────────────
+    # ── Traces → Tempo ───────────────────────────────────────────────────
     traces:
       receivers:  [otlp]
-      processors: [memory_limiter, resourcedetection, resource, batch]
+      processors: [memory_limiter, resource, batch]
       exporters:  [otlp/tempo, debug]
 
-    # ── Metrics → Mimir ──────────────────────────────────────────────────────
+    # ── Metrics → Prometheus + Mimir ─────────────────────────────────────
     metrics:
       receivers:  [otlp, prometheus]
-      processors: [memory_limiter, resourcedetection, resource, batch]
-      exporters:  [prometheusremotewrite/mimir]
+      processors: [memory_limiter, resource, batch]
+      exporters:  [prometheus, prometheusremotewrite/mimir]
 
-    # ── Logs → Loki ──────────────────────────────────────────────────────────
+    # ── Logs → Loki ──────────────────────────────────────────────────────
     logs:
       receivers:  [otlp]
-      processors: [memory_limiter, resourcedetection, resource, batch]
+      processors: [memory_limiter, resource, batch]
       exporters:  [loki, debug]
-
-  # ── Collector self-metrics ────────────────────────────────────────────────
-  telemetry:
-    logs:
-      level: info
-    metrics:
-      level: basic
-      address: 0.0.0.0:8888
