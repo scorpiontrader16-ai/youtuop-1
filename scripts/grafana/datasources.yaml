@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Grafana — Datasources Provisioning
+# Auto-configured on startup — no manual setup needed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+datasources:
+  # ── Mimir — Metrics ────────────────────────────────────────────────────────
+  - name: Mimir
+    type: prometheus
+    uid: mimir
+    url: http://mimir:9009/prometheus
+    isDefault: true
+    access: proxy
+    editable: false
+    jsonData:
+      httpMethod: POST
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
+
+  # ── Tempo — Traces ─────────────────────────────────────────────────────────
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    url: http://tempo:3200
+    access: proxy
+    editable: false
+    jsonData:
+      httpMethod: GET
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: "-1m"
+        spanEndTimeShift: "1m"
+        filterByTraceID: true
+        filterBySpanID: false
+      tracesToMetrics:
+        datasourceUid: mimir
+        spanStartTimeShift: "-1m"
+        spanEndTimeShift: "1m"
+      serviceMap:
+        datasourceUid: mimir
+      nodeGraph:
+        enabled: true
+      lokiSearch:
+        datasourceUid: loki
+
+  # ── Loki — Logs ────────────────────────────────────────────────────────────
+  - name: Loki
+    type: loki
+    uid: loki
+    url: http://loki:3100
+    access: proxy
+    editable: false
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
