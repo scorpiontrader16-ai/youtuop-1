@@ -107,12 +107,34 @@ services:
     networks:
       - platform
 
+  # ── Tempo — Distributed tracing ───────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: tempo
+    command: -config.file=/etc/tempo/config.yaml
+    ports:
+      - "3200:3200"   # HTTP API (query)
+      - "4319:4317"   # OTLP gRPC receiver (avoid clash with otel-collector:4317)
+    volumes:
+      - ./scripts/tempo.yaml:/etc/tempo/config.yaml:ro
+      - tempo_data:/tmp/tempo
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3200/ready || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - platform
+
   # ── OpenTelemetry Collector ───────────────────────────────────────────────
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.96.0
     container_name: otel-collector
     depends_on:
       loki:
+        condition: service_healthy
+      tempo:
         condition: service_healthy
     ports:
       - "4317:4317"   # gRPC receiver
@@ -203,6 +225,7 @@ volumes:
   postgres_data:
   redis_data:
   loki_data:
+  tempo_data:
 
 # ── Networks ──────────────────────────────────────────────────────────────
 networks:
