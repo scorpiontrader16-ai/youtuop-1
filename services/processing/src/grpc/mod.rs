@@ -17,6 +17,7 @@ use tonic::{Request, Response, Status, Streaming};
 use tracing::{info, instrument, warn};
 
 use crate::engine::{CorrelationEngine, SignalEngine};
+use crate::events::v1::BaseEvent;
 
 pub mod processing_v1 {
     tonic::include_proto!("processing.v1");
@@ -24,7 +25,6 @@ pub mod processing_v1 {
         tonic::include_file_descriptor_set!("processing_descriptor");
 }
 
-use crate::ingestion::v1::market_event::Data as EventData;
 use processing_v1::{
     processing_engine_service_server::{
         ProcessingEngineService, ProcessingEngineServiceServer,
@@ -104,16 +104,9 @@ impl ProcessingEngineService for Engine {
             Status::invalid_argument("event is required")
         })?;
 
-        let event_type = match &event.data {
-            Some(EventData::Price(_)) => "price",
-            Some(EventData::News(_))  => "news",
-            Some(EventData::Book(_))  => "book",
-            None                      => "unknown",
-        };
-
         let (signal, indicators) = analyze_event(&event);
-        let elapsed = start.elapsed();
-        let processing_us = elapsed.as_micros() as f64;
+        let elapsed              = start.elapsed();
+        let processing_us        = elapsed.as_micros() as f64;
 
         histogram!("processing_grpc_request_duration_seconds",
             "method" => "process_event"
@@ -124,10 +117,16 @@ impl ProcessingEngineService for Engine {
         ).increment(1);
 
         counter!("processing_events_processed_total",
-            "event_type" => event_type.to_string()
+            "event_type" => event.event_type.clone()
         ).increment(1);
 
-        info!(event_id = %event.event_id, symbol = %event.symbol, processing_us, "event processed");
+        info!(
+            event_id   = %event.event_id,
+            event_type = %event.event_type,
+            source     = %event.source,
+            processing_us,
+            "event processed"
+        );
 
         Ok(Response::new(ProcessEventResponse {
             event_id:          event.event_id,
@@ -284,53 +283,65 @@ impl ProcessingEngineService for Engine {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-fn analyze_event(
-    event: &crate::ingestion::v1::MarketEvent,
-) -> (Signal, HashMap<String, f64>) {
+
+/// analyze_event — يحلل BaseEvent ويرجع Signal + indicators
+/// يستخدم event_type وcontent_type من الـ envelope
+fn analyze_event(event: &BaseEvent) -> (Signal, HashMap<String, f64>) {
     let mut indicators = HashMap::new();
 
-    let (direction, strength, reason): (Direction, f64, String) = match &event.data {
-        Some(EventData::Price(price)) => {
-            let change_pct = if price.open != 0.0 {
-                (price.close - price.open) / price.open * 100.0
-            } else { 0.0 };
-            indicators.insert("price_change_pct".into(), change_pct);
-            indicators.insert("volume".into(),           price.volume);
-            indicators.insert("close".into(),            price.close);
-            if change_pct > 0.5 {
-                (Direction::Bullish, (change_pct / 5.0).min(1.0), "positive price movement".into())
-            } else if change_pct < -0.5 {
-                (Direction::Bearish, (change_pct.abs() / 5.0).min(1.0), "negative price movement".into())
-            } else {
-                (Direction::Neutral, 0.1, "minimal price movement".into())
-            }
-        }
-        Some(EventData::News(_)) => (
-            Direction::Neutral, 0.0,
-            "news event — sentiment analysis not yet implemented".into(),
-        ),
-        Some(EventData::Book(book)) => {
-            let bid_vol: f64 = book.bids.iter().map(|l| l.quantity).sum();
-            let ask_vol: f64 = book.asks.iter().map(|l| l.quantity).sum();
-            let total     = bid_vol + ask_vol;
-            let imbalance = if total > 0.0 { (bid_vol - ask_vol) / total } else { 0.0 };
-            indicators.insert("order_book_imbalance".into(), imbalance);
-            if imbalance > 0.2 {
-                (Direction::Bullish, imbalance.min(1.0), "buy-side order book imbalance".into())
-            } else if imbalance < -0.2 {
-                (Direction::Bearish, imbalance.abs().min(1.0), "sell-side order book imbalance".into())
-            } else {
-                (Direction::Neutral, 0.1, "balanced order book".into())
-            }
-        }
-        None => (Direction::Unknown, 0.0, "no event data".into()),
+    indicators.insert("schema_version".into(), {
+        // نحول الـ schema_version لـ float للتتبع (مثلاً "1.0.0" → 100.0)
+        event.schema_version
+            .split('.')
+            .next()
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(0.0)
+    });
+
+    // نستخدم event_type لتحديد الاتجاه
+    let event_type = event.event_type.to_lowercase();
+
+    let (direction, strength, reason) = if event_type.contains("buy")
+        || event_type.contains("bullish")
+        || event_type.contains("up")
+    {
+        (Direction::Bullish, 0.7, format!("event_type indicates bullish: {}", event.event_type))
+    } else if event_type.contains("sell")
+        || event_type.contains("bearish")
+        || event_type.contains("down")
+    {
+        (Direction::Bearish, 0.7, format!("event_type indicates bearish: {}", event.event_type))
+    } else {
+        (Direction::Neutral, 0.1, format!("neutral event_type: {}", event.event_type))
     };
 
-    (Signal { direction: direction as i32, strength, confidence: 0.5, reason }, indicators)
+    // أضف metadata values كـ indicators لو موجودة
+    if let Some(meta) = &event.metadata {
+        for (k, v) in &meta.fields {
+            if let Some(prost_types::value::Kind::NumberValue(n)) = &v.kind {
+                indicators.insert(k.clone(), *n);
+            }
+        }
+    }
+
+    (
+        Signal {
+            direction:  direction as i32,
+            strength,
+            confidence: 0.5,
+            reason,
+        },
+        indicators,
+    )
 }
 
 fn default_risk_metrics() -> RiskMetrics {
-    RiskMetrics { volatility_24h: 0.0, max_drawdown: 0.0, sharpe_ratio: 0.0, var_95: 0.0 }
+    RiskMetrics {
+        volatility_24h: 0.0,
+        max_drawdown:   0.0,
+        sharpe_ratio:   0.0,
+        var_95:         0.0,
+    }
 }
 
 fn now_timestamp() -> prost_types::Timestamp {
