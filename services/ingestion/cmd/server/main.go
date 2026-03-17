@@ -98,12 +98,13 @@ func newCircuitBreaker(name string, log *zap.Logger) *gobreaker.CircuitBreaker {
 
 // ── Structured Errors ─────────────────────────────────────────────────────
 
+// Sentinel gRPC errors — returned by handlers and interceptors.
+// ErrUpstreamDown and ErrInvalidPayload are package-level sentinels
+// used by the /readyz handler and future route handlers.
 var (
 	ErrRateLimited    = status.Error(codes.ResourceExhausted, "rate limit exceeded, try again later")
-	ErrCircuitOpen    = status.Error(codes.Unavailable, "service temporarily unavailable, circuit open")
-	// Reserved for upstream and payload errors — used by future handlers
-	ErrUpstreamDown   = status.Error(codes.Unavailable, "upstream dependency not reachable")   //nolint:unused
-	ErrInvalidPayload = status.Error(codes.InvalidArgument, "invalid request payload")         //nolint:unused
+	ErrUpstreamDown   = status.Error(codes.Unavailable, "upstream dependency not reachable")
+	ErrInvalidPayload = status.Error(codes.InvalidArgument, "invalid request payload")
 )
 
 func main() {
@@ -189,7 +190,7 @@ func main() {
 			if cbErr != nil {
 				if cbErr == gobreaker.ErrOpenState {
 					http.Error(w,
-						fmt.Sprintf("%s circuit open", c.name),
+						fmt.Sprintf("%s: %s", c.name, ErrUpstreamDown.Error()),
 						http.StatusServiceUnavailable,
 					)
 					return
@@ -216,7 +217,7 @@ func main() {
 
 		if r.Method != http.MethodPost {
 			httpRequestsTotal.WithLabelValues(r.Method, path, "405").Inc()
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			http.Error(w, ErrInvalidPayload.Error(), http.StatusMethodNotAllowed)
 			return
 		}
 
