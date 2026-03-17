@@ -10,13 +10,13 @@ use futures::Stream;
 use governor::{Quota, RateLimiter};
 use governor::clock::DefaultClock;
 use governor::state::{InMemoryState, NotKeyed};
+use metrics::{counter, histogram};
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt as _};
 use tonic::{Request, Response, Status, Streaming};
 use tracing::{info, instrument, warn};
 
 use crate::engine::{CorrelationEngine, SignalEngine};
-use crate::Metrics;
 
 pub mod processing_v1 {
     tonic::include_proto!("processing.v1");
@@ -42,18 +42,15 @@ pub struct Engine {
     signal:       SignalEngine,
     #[allow(dead_code)]
     correlation:  CorrelationEngine,
-    metrics:      Arc<Metrics>,
     rate_limiter: Arc<DirectRateLimiter>,
 }
 
 impl Engine {
-    pub fn new(metrics: Arc<Metrics>) -> Self {
-        // 500 requests per second
+    pub fn new() -> Self {
         let quota = Quota::per_second(NonZeroU32::new(500).unwrap());
         Self {
             signal:       SignalEngine::new(),
             correlation:  CorrelationEngine::new(),
-            metrics,
             rate_limiter: Arc::new(RateLimiter::direct(quota)),
         }
     }
@@ -62,24 +59,24 @@ impl Engine {
         ProcessingEngineServiceServer::new(self)
     }
 
-    /// Check rate limit — returns Err(Status) if exceeded.
     fn check_rate_limit(&self, method: &str) -> Result<(), Status> {
         match self.rate_limiter.check() {
             Ok(_)  => Ok(()),
             Err(_) => {
                 warn!(method, "gRPC rate limit exceeded");
-                self.metrics.grpc_requests_total
-                    .with_label_values(&[method, "rate_limited"])
-                    .inc();
+                counter!("processing_grpc_requests_total",
+                    "method" => method.to_string(),
+                    "status" => "rate_limited"
+                ).increment(1);
                 Err(Status::resource_exhausted("rate limit exceeded, try again later"))
             }
         }
     }
 }
 
-// Note: Engine::default() intentionally omitted.
-// Always construct via Engine::new(metrics) to avoid
-// re-registering Prometheus metrics which causes a panic.
+impl Default for Engine {
+    fn default() -> Self { Self::new() }
+}
 
 impl std::fmt::Debug for Engine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -98,42 +95,39 @@ impl ProcessingEngineService for Engine {
         self.check_rate_limit("process_event")?;
 
         let start = Instant::now();
-        let timer = self.metrics.grpc_request_duration
-            .with_label_values(&["process_event"]);
-
         let req   = request.into_inner();
-        let event = req.event
-            .ok_or_else(|| {
-                self.metrics.grpc_requests_total
-                    .with_label_values(&["process_event", "invalid_argument"])
-                    .inc();
-                Status::invalid_argument("event is required")
-            })?;
+
+        let event = req.event.ok_or_else(|| {
+            counter!("processing_grpc_requests_total",
+                "method" => "process_event", "status" => "invalid_argument"
+            ).increment(1);
+            Status::invalid_argument("event is required")
+        })?;
 
         let event_type = match &event.data {
-            Some(crate::ingestion::v1::market_event::Data::Price(_)) => "price",
-            Some(crate::ingestion::v1::market_event::Data::News(_))  => "news",
-            Some(crate::ingestion::v1::market_event::Data::Book(_))  => "book",
-            None => "unknown",
+            Some(EventData::Price(_)) => "price",
+            Some(EventData::News(_))  => "news",
+            Some(EventData::Book(_))  => "book",
+            None                      => "unknown",
         };
 
         let (signal, indicators) = analyze_event(&event);
-        let processing_us = start.elapsed().as_micros() as f64;
+        let elapsed = start.elapsed();
+        let processing_us = elapsed.as_micros() as f64;
 
-        timer.observe(start.elapsed().as_secs_f64());
-        self.metrics.grpc_requests_total
-            .with_label_values(&["process_event", "ok"])
-            .inc();
-        self.metrics.events_processed_total
-            .with_label_values(&[event_type])
-            .inc();
+        histogram!("processing_grpc_request_duration_seconds",
+            "method" => "process_event"
+        ).record(elapsed.as_secs_f64());
 
-        info!(
-            event_id  = %event.event_id,
-            symbol    = %event.symbol,
-            processing_us,
-            "event processed"
-        );
+        counter!("processing_grpc_requests_total",
+            "method" => "process_event", "status" => "ok"
+        ).increment(1);
+
+        counter!("processing_events_processed_total",
+            "event_type" => event_type.to_string()
+        ).increment(1);
+
+        info!(event_id = %event.event_id, symbol = %event.symbol, processing_us, "event processed");
 
         Ok(Response::new(ProcessEventResponse {
             event_id:          event.event_id,
@@ -161,10 +155,7 @@ impl ProcessingEngineService for Engine {
         tokio::spawn(async move {
             while let Some(result) = inbound.next().await {
                 let response = match result {
-                    Err(e) => {
-                        warn!(error = %e, "stream receive error");
-                        Err(Status::internal(e.to_string()))
-                    }
+                    Err(e) => Err(Status::internal(e.to_string())),
                     Ok(req) => match req.event {
                         None => Err(Status::invalid_argument("event is required")),
                         Some(event) => {
@@ -183,9 +174,7 @@ impl ProcessingEngineService for Engine {
                         }
                     },
                 };
-                if tx.send(response).await.is_err() {
-                    break;
-                }
+                if tx.send(response).await.is_err() { break; }
             }
         });
 
@@ -201,21 +190,21 @@ impl ProcessingEngineService for Engine {
         let req = request.into_inner();
 
         if req.symbol_a.is_empty() || req.symbol_b.is_empty() {
-            self.metrics.grpc_requests_total
-                .with_label_values(&["compute_correlation", "invalid_argument"])
-                .inc();
+            counter!("processing_grpc_requests_total",
+                "method" => "compute_correlation", "status" => "invalid_argument"
+            ).increment(1);
             return Err(Status::invalid_argument("symbol_a and symbol_b are required"));
         }
         if req.lookback_days <= 0 {
-            self.metrics.grpc_requests_total
-                .with_label_values(&["compute_correlation", "invalid_argument"])
-                .inc();
+            counter!("processing_grpc_requests_total",
+                "method" => "compute_correlation", "status" => "invalid_argument"
+            ).increment(1);
             return Err(Status::invalid_argument("lookback_days must be positive"));
         }
 
-        self.metrics.grpc_requests_total
-            .with_label_values(&["compute_correlation", "ok"])
-            .inc();
+        counter!("processing_grpc_requests_total",
+            "method" => "compute_correlation", "status" => "ok"
+        ).increment(1);
 
         Ok(Response::new(CorrelationResponse {
             symbol_a:       req.symbol_a,
@@ -236,15 +225,15 @@ impl ProcessingEngineService for Engine {
         let req = request.into_inner();
 
         if req.symbol.is_empty() {
-            self.metrics.grpc_requests_total
-                .with_label_values(&["extract_signals", "invalid_argument"])
-                .inc();
+            counter!("processing_grpc_requests_total",
+                "method" => "extract_signals", "status" => "invalid_argument"
+            ).increment(1);
             return Err(Status::invalid_argument("symbol is required"));
         }
         if req.prices.len() < 2 {
-            self.metrics.grpc_requests_total
-                .with_label_values(&["extract_signals", "invalid_argument"])
-                .inc();
+            counter!("processing_grpc_requests_total",
+                "method" => "extract_signals", "status" => "invalid_argument"
+            ).increment(1);
             return Err(Status::invalid_argument("at least 2 price points are required"));
         }
 
@@ -285,9 +274,9 @@ impl ProcessingEngineService for Engine {
             }
         }
 
-        self.metrics.grpc_requests_total
-            .with_label_values(&["extract_signals", "ok"])
-            .inc();
+        counter!("processing_grpc_requests_total",
+            "method" => "extract_signals", "status" => "ok"
+        ).increment(1);
 
         info!(symbol = %req.symbol, indicators = values.len(), "signals extracted");
         Ok(Response::new(SignalResponse { values, signals }))
@@ -304,13 +293,10 @@ fn analyze_event(
         Some(EventData::Price(price)) => {
             let change_pct = if price.open != 0.0 {
                 (price.close - price.open) / price.open * 100.0
-            } else {
-                0.0
-            };
+            } else { 0.0 };
             indicators.insert("price_change_pct".into(), change_pct);
             indicators.insert("volume".into(),           price.volume);
             indicators.insert("close".into(),            price.close);
-
             if change_pct > 0.5 {
                 (Direction::Bullish, (change_pct / 5.0).min(1.0), "positive price movement".into())
             } else if change_pct < -0.5 {
@@ -340,10 +326,7 @@ fn analyze_event(
         None => (Direction::Unknown, 0.0, "no event data".into()),
     };
 
-    (
-        Signal { direction: direction as i32, strength, confidence: 0.5, reason },
-        indicators,
-    )
+    (Signal { direction: direction as i32, strength, confidence: 0.5, reason }, indicators)
 }
 
 fn default_risk_metrics() -> RiskMetrics {
