@@ -1,5 +1,4 @@
 # Platform Infrastructure — High-Performance ARM64
-
 > Kubernetes ARM64 + GitOps + Zero Trust + Go + Rust
 
 ---
@@ -7,7 +6,6 @@
 ## Quick Start
 
 ### 1. Configure GitHub Secrets
-
 ```
 AWS_OIDC_ROLE_ARN              # IAM Role ARN (OIDC)
 AWS_OIDC_ROLE_ARN_STAGING
@@ -19,17 +17,14 @@ INFRACOST_API_KEY              # From infracost.io (free)
 ```
 
 ### 2. Configure GitHub Environments
-
 In GitHub → Settings → Environments:
 - `staging` — no approval required
 - `production` — require 1+ reviewers
 
 ### 3. Replace Placeholder Values
-
 Search for `your-org` and replace with your GitHub org name.
 
 ### 4. Push to GitHub
-
 ```bash
 git init
 git add .
@@ -40,8 +35,59 @@ git push -u origin main
 
 ---
 
-## Architecture
+## Local Development
 
+### Prerequisites
+- Docker + Docker Compose
+- Go 1.22+
+- Rust 1.85+
+- [buf](https://buf.build/docs/installation) (proto tooling)
+
+### Start all services
+```bash
+cp .env.example .env
+make dev
+```
+
+Services available after `make dev`:
+
+| Service | URL |
+|---------|-----|
+| Redpanda Console | http://localhost:8080 |
+| Redpanda Kafka API | localhost:9092 |
+| Redpanda Schema Registry | http://localhost:8081 |
+| Ingestion HTTP | http://localhost:9091 |
+| Ingestion gRPC | localhost:8090 |
+| Processing gRPC | localhost:50051 |
+| Processing metrics | http://localhost:9093/metrics |
+| Postgres | localhost:5432 |
+| Redis | localhost:6379 |
+
+### Common commands
+```bash
+make health        # Check all services health
+make logs          # Tail all logs
+make proto         # Regenerate code from .proto files
+make test          # Run all tests (Go + Rust)
+make lint          # Run all linters
+make down          # Stop all services
+```
+
+### Health checks
+```bash
+# Ingestion
+curl http://localhost:9091/healthz   # liveness
+curl http://localhost:9091/readyz    # readiness
+
+# Processing
+curl http://localhost:9093/healthz   # liveness
+curl http://localhost:9093/readyz    # readiness
+curl http://localhost:9093/metrics   # Prometheus metrics
+```
+
+---
+
+## Architecture
 ```
 External APIs / WebSockets
          │
@@ -66,7 +112,6 @@ External APIs / WebSockets
 ---
 
 ## Repository Structure
-
 ```
 platform/
 ├── .github/workflows/       # CI/CD (7 workflows)
@@ -82,21 +127,24 @@ platform/
 ├── services/
 │   ├── ingestion/           # Go service
 │   └── processing/          # Rust service
-└── scripts/
-    ├── chaos/               # Chaos Mesh manifests
-    └── load-tests/          # k6 load tests
+├── scripts/
+│   ├── chaos/               # Chaos Mesh manifests
+│   ├── load-tests/          # k6 load tests
+│   └── otel-collector.yaml  # OpenTelemetry Collector config
+├── docker-compose.yml       # Local development stack
+├── Makefile                 # Developer commands
+└── .env.example             # Environment variables template
 ```
 
 ---
 
 ## Adding a New Service
-
 ```bash
 # 1. Define the API contract first
 touch proto/my-service/v1/service.proto
 
 # 2. Generate SDKs (CI does this automatically on push)
-buf generate proto
+cd proto && buf generate
 
 # 3. Create the service
 mkdir -p services/my-service
@@ -111,7 +159,6 @@ mkdir -p k8s/base/my-service
 ---
 
 ## Secrets Setup
-
 All secrets are managed by HashiCorp Vault via External Secrets Operator.
 No secrets are stored in Git. Ever.
 
