@@ -3,12 +3,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proto_root   = format!("{}/../../proto", manifest_dir);
 
     // Single pass — compile both protos together.
-    // prost generates cross-references as super::super::ingestion::v1::MarketEvent.
+    // prost generates cross-references as events::v1::BaseEvent.
     // processing_v1 lives at crate::grpc::processing_v1, so:
     //   super           = crate::grpc
     //   super::super    = crate
-    //   super::super::ingestion::v1 = crate::ingestion::v1  ✅
-    // No extern_path needed.
+    //   super::super::events::v1 = crate::events::v1  ✅
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
@@ -18,13 +17,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .compile_protos(
             &[
-                &format!("{}/ingestion/v1/events.proto",   proto_root),
+                &format!("{}/events/v1/event.proto",       proto_root),
                 &format!("{}/processing/v1/engine.proto",  proto_root),
             ],
             &[&proto_root],
         )?;
 
-    println!("cargo:rerun-if-changed={}/ingestion/v1/events.proto",  proto_root);
+    println!("cargo:rerun-if-changed={}/events/v1/event.proto",      proto_root);
     println!("cargo:rerun-if-changed={}/processing/v1/engine.proto", proto_root);
+
     Ok(())
 }
