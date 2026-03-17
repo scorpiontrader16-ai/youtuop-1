@@ -1,10 +1,7 @@
-//! Kafka / Redpanda consumer
-//!
-//! Reads MarketEvents from a Kafka topic (protobuf-encoded),
-//! deserializes them, and forwards each event to the ProcessingEngine
-//! via gRPC (ProcessEvent RPC).
+//! Kafka / Redpanda consumer with Circuit Breaker on gRPC calls
 
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use prost::Message;
 use rdkafka::{
@@ -21,6 +18,77 @@ use crate::grpc::processing_v1::{
     ProcessEventRequest, ProcessingConfig,
 };
 use crate::ingestion::v1::MarketEvent;
+use crate::Metrics;
+
+// ── Circuit Breaker ───────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CbState {
+    Closed,
+    Open,
+    HalfOpen,
+}
+
+struct CircuitBreaker {
+    state:               CbState,
+    consecutive_failures: u32,
+    failure_threshold:   u32,
+    last_failure:        Option<Instant>,
+    timeout:             Duration,
+}
+
+impl CircuitBreaker {
+    fn new(failure_threshold: u32, timeout: Duration) -> Self {
+        Self {
+            state: CbState::Closed,
+            consecutive_failures: 0,
+            failure_threshold,
+            last_failure: None,
+            timeout,
+        }
+    }
+
+    /// Returns true if the call is allowed.
+    fn allow(&mut self) -> bool {
+        match self.state {
+            CbState::Closed   => true,
+            CbState::HalfOpen => true,
+            CbState::Open => {
+                if let Some(t) = self.last_failure {
+                    if t.elapsed() >= self.timeout {
+                        self.state = CbState::HalfOpen;
+                        info!("circuit breaker → half-open");
+                        return true;
+                    }
+                }
+                false
+            }
+        }
+    }
+
+    fn on_success(&mut self) {
+        if self.state == CbState::HalfOpen {
+            info!("circuit breaker → closed");
+        }
+        self.state                = CbState::Closed;
+        self.consecutive_failures = 0;
+        self.last_failure         = None;
+    }
+
+    fn on_failure(&mut self) {
+        self.consecutive_failures += 1;
+        self.last_failure          = Some(Instant::now());
+        if self.consecutive_failures >= self.failure_threshold {
+            if self.state != CbState::Open {
+                warn!(
+                    failures = self.consecutive_failures,
+                    "circuit breaker → open"
+                );
+            }
+            self.state = CbState::Open;
+        }
+    }
+}
 
 // ── Config ────────────────────────────────────────────────────────────────
 #[derive(Debug, Clone)]
@@ -48,17 +116,19 @@ impl ConsumerConfig {
 
 // ── Consumer ──────────────────────────────────────────────────────────────
 pub struct KafkaConsumer {
-    consumer: StreamConsumer,
-    client:   ProcessingEngineServiceClient<Channel>,
-    /// Retained for future use (e.g. dynamic topic reload)
+    consumer:        StreamConsumer,
+    client:          ProcessingEngineServiceClient<Channel>,
+    circuit_breaker: Arc<Mutex<CircuitBreaker>>,
+    metrics:         Arc<Metrics>,
     #[allow(dead_code)]
-    config:   ConsumerConfig,
+    config:          ConsumerConfig,
 }
 
 impl KafkaConsumer {
-    /// Build the Kafka consumer and connect to the gRPC server.
-    /// Retries the gRPC connection up to 5 times with backoff.
-    pub async fn new(config: ConsumerConfig) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn new(
+        config:  ConsumerConfig,
+        metrics: Arc<Metrics>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let consumer: StreamConsumer = ClientConfig::new()
             .set("bootstrap.servers",    &config.brokers)
             .set("group.id",             &config.group_id)
@@ -66,7 +136,7 @@ impl KafkaConsumer {
             .set("auto.offset.reset",    "earliest")
             .set("session.timeout.ms",   "30000")
             .set("max.poll.interval.ms", "300000")
-            .set("fetch.max.bytes",      "10485760") // 10 MB
+            .set("fetch.max.bytes",      "10485760")
             .create()?;
 
         consumer.subscribe(&[&config.topic])?;
@@ -74,10 +144,13 @@ impl KafkaConsumer {
 
         let client = connect_with_retry(&config.processing_addr, 5).await?;
 
-        Ok(Self { consumer, client, config })
+        let circuit_breaker = Arc::new(Mutex::new(
+            CircuitBreaker::new(5, Duration::from_secs(30))
+        ));
+
+        Ok(Self { consumer, client, circuit_breaker, metrics, config })
     }
 
-    /// Main loop — runs until the shutdown watch fires.
     pub async fn run(mut self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         info!("consumer loop started");
 
@@ -94,21 +167,50 @@ impl KafkaConsumer {
                     match result {
                         Err(e) => {
                             error!(error = %e, "kafka receive error");
+                            self.metrics.kafka_errors_total
+                                .with_label_values(&["receive"])
+                                .inc();
                             sleep(Duration::from_millis(500)).await;
                         }
                         Ok(msg) => {
-                            // Copy metadata + payload out of the borrowed message
-                            // BEFORE calling handle_message so the borrow on
-                            // self.consumer is released and we can pass &mut self.client
                             let partition = msg.partition();
                             let offset    = msg.offset();
                             let topic     = msg.topic().to_string();
                             let payload   = msg.payload().map(|p| p.to_vec());
 
-                            handle_message(
+                            let allowed = {
+                                let mut cb = self.circuit_breaker.lock().unwrap();
+                                cb.allow()
+                            };
+
+                            if !allowed {
+                                warn!("circuit breaker open — dropping message");
+                                self.metrics.kafka_errors_total
+                                    .with_label_values(&["circuit_open"])
+                                    .inc();
+                                self.metrics.circuit_breaker_state.set(1.0);
+                                sleep(Duration::from_secs(1)).await;
+                                continue;
+                            }
+
+                            let success = handle_message(
                                 &mut self.client,
                                 &topic, partition, offset, payload,
+                                &self.metrics,
                             ).await;
+
+                            {
+                                let mut cb = self.circuit_breaker.lock().unwrap();
+                                if success {
+                                    cb.on_success();
+                                    self.metrics.circuit_breaker_state.set(0.0);
+                                } else {
+                                    cb.on_failure();
+                                    if cb.state == CbState::Open {
+                                        self.metrics.circuit_breaker_state.set(1.0);
+                                    }
+                                }
+                            }
 
                             if let Err(e) = self.consumer.commit_message(&msg, CommitMode::Async) {
                                 warn!(error = %e, "commit failed");
@@ -121,34 +223,35 @@ impl KafkaConsumer {
 
         info!("consumer loop stopped");
     }
-} // ── end impl KafkaConsumer ───────────────────────────────────────────────
+}
 
 // ── Free functions ────────────────────────────────────────────────────────
-// These are intentionally outside the impl block so we can borrow
-// `client` and `consumer` independently inside the run loop.
 
-/// Decode a protobuf payload and forward the MarketEvent via gRPC.
-#[instrument(skip(client, payload), fields(%topic, partition, offset))]
+#[instrument(skip(client, payload, metrics), fields(%topic, partition, offset))]
 async fn handle_message(
     client:    &mut ProcessingEngineServiceClient<Channel>,
     topic:     &str,
     partition: i32,
     offset:    i64,
     payload:   Option<Vec<u8>>,
-) {
+    metrics:   &Arc<Metrics>,
+) -> bool {
     let bytes = match payload {
         Some(b) if !b.is_empty() => b,
         _ => {
             warn!(%topic, partition, offset, "empty payload — skipping");
-            return;
+            metrics.kafka_messages_total.with_label_values(&["skipped"]).inc();
+            return true; // Not a failure — just empty
         }
     };
 
     let event = match MarketEvent::decode(bytes.as_slice()) {
         Ok(e)  => e,
         Err(e) => {
-            error!(error = %e, %topic, partition, offset, "protobuf decode failed");
-            return;
+            error!(error = %e, "protobuf decode failed");
+            metrics.kafka_errors_total.with_label_values(&["decode"]).inc();
+            metrics.kafka_messages_total.with_label_values(&["decode_error"]).inc();
+            return false;
         }
     };
 
@@ -172,14 +275,18 @@ async fn handle_message(
                 processing_us     = r.processing_us,
                 "event processed successfully"
             );
+            metrics.kafka_messages_total.with_label_values(&["success"]).inc();
+            true
         }
         Err(e) => {
             error!(error = %e, "gRPC process_event failed");
+            metrics.kafka_errors_total.with_label_values(&["grpc"]).inc();
+            metrics.kafka_messages_total.with_label_values(&["grpc_error"]).inc();
+            false
         }
     }
 }
 
-/// Connect to the gRPC server with exponential backoff.
 async fn connect_with_retry(
     addr: &str,
     max_retries: u32,
@@ -204,9 +311,7 @@ async fn connect_with_retry(
                     ).into());
                 }
                 warn!(
-                    addr,
-                    attempt,
-                    max_retries,
+                    addr, attempt, max_retries,
                     delay_secs = delay.as_secs(),
                     error = %e,
                     "gRPC connection failed, retrying"
@@ -222,8 +327,8 @@ async fn connect_with_retry(
 
 fn default_processing_config() -> ProcessingConfig {
     ProcessingConfig {
-        indicators:       vec!["rsi".into(), "macd".into(), "correlation".into()],
-        lookback_periods: 14,
+        indicators:        vec!["rsi".into(), "macd".into(), "correlation".into()],
+        lookback_periods:  14,
         include_sentiment: false,
     }
 }
