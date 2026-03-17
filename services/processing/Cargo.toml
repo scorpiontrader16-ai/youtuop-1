@@ -33,8 +33,9 @@ tracing-opentelemetry = "0.25"
 axum       = "0.7"
 tower-http = { version = "0.5", features = ["trace"] }
 
-# Metrics
-prometheus = { version = "0.13", features = ["process"] }
+# Metrics — using metrics-rs (no protobuf dependency, no CVEs)
+metrics            = "0.23"
+metrics-exporter-prometheus = { version = "0.15", default-features = false }
 
 nalgebra  = "0.32"
 statrs    = "0.16"
