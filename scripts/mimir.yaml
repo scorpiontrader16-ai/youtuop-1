@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Mimir — Local Development Config
+# Single-process mode (monolithic) — suitable for local dev only.
+# Receives metrics via remote_write from OTel Collector + Tempo.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Run all components in a single process (includes alertmanager)
+target: all
+
+multitenancy_enabled: false
+
+server:
+  http_listen_port: 9009
+  grpc_listen_port: 9095
+  log_level: warn
+
+common:
+  storage:
+    backend: filesystem
+    filesystem:
+      dir: /data/mimir
+
+blocks_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/mimir/blocks
+  tsdb:
+    dir: /data/mimir/tsdb
+
+compactor:
+  data_dir: /data/mimir/compactor
+  sharding_ring:
+    kvstore:
+      store: memberlist
+
+distributor:
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: memberlist
+
+ingester:
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: memberlist
+    replication_factor: 1
+
+ruler_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/mimir/rules
+
+alertmanager_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/mimir/alertmanager
+
+memberlist:
+  join_members: []
+
+limits:
+  # Allow out-of-order samples (common from multiple scrapers)
+  out_of_order_time_window: 5m
+  # Increase cardinality limits for local dev
+  max_label_names_per_series: 40
