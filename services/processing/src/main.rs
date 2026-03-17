@@ -22,9 +22,10 @@ mod engine;
 mod consumer;
 mod grpc;
 
-pub mod ingestion {
+// FIX: كان ingestion::v1 — غُيّر لـ events::v1 عشان يطابق package في event.proto
+pub mod events {
     pub mod v1 {
-        tonic::include_proto!("ingestion.v1");
+        tonic::include_proto!("events.v1");
     }
 }
 
@@ -68,8 +69,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ── Prometheus exporter ───────────────────────────────────────────────
-    // PrometheusBuilder installs a global recorder — all metrics:: calls
-    // anywhere in the codebase are captured automatically.
     let prometheus_handle = PrometheusBuilder::new()
         .install_recorder()
         .map_err(|e| format!("failed to install prometheus recorder: {e}"))?;
@@ -146,10 +145,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 // ── HTTP server ───────────────────────────────────────────────────────────
 async fn run_http_server(
-    addr:             SocketAddr,
-    state:            AppState,
+    addr:              SocketAddr,
+    state:             AppState,
     prometheus_handle: PrometheusHandle,
-    shutdown:         impl std::future::Future<Output = ()> + Send + 'static,
+    shutdown:          impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/healthz", get(healthz))
