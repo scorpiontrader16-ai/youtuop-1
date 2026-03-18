@@ -92,3 +92,92 @@ output "vault_role_arn" {
 output "vault_storage_bucket" {
   value = aws_s3_bucket.vault.bucket
 }
+variable "oidc_provider_arn" {
+  type = string
+}
+
+variable "oidc_provider_url" {
+  type = string
+}
+
+variable "namespace" {
+  type    = string
+  default = "platform"
+}
+
+# IRSA role for Vault
+resource "aws_iam_role" "vault_irsa" {
+  name = "${var.cluster_name}-vault-irsa"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = var.oidc_provider_arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${var.oidc_provider_url}:sub" = "system:serviceaccount:vault:vault"
+          "${var.oidc_provider_url}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+
+  tags = { Environment = var.environment }
+}
+
+resource "aws_iam_role_policy_attachment" "vault_irsa_kms" {
+  role       = aws_iam_role.vault_irsa.name
+  policy_arn = aws_iam_role_policy.vault_kms.id
+}
+
+# Vault Helm chart
+resource "helm_release" "vault" {
+  name             = "vault"
+  repository       = "https://helm.releases.hashicorp.com"
+  chart            = "vault"
+  version          = "0.27.0"
+  namespace        = "vault"
+  create_namespace = true
+
+  values = [
+    yamlencode({
+      server = {
+        serviceAccount = {
+          annotations = {
+            "eks.amazonaws.com/role-arn" = aws_iam_role.vault_irsa.arn
+          }
+        }
+        ha = {
+          enabled  = true
+          replicas = 3
+          raft = {
+            enabled = true
+          }
+        }
+        extraEnvironmentVars = {
+          VAULT_SEAL_TYPE       = "awskms"
+          VAULT_AWSKMS_SEAL_KEY_ID = var.kms_key_id
+        }
+        storage = {
+          s3 = {
+            bucket = aws_s3_bucket.vault.bucket
+            region = "us-east-1"
+          }
+        }
+      }
+      injector = {
+        enabled = false
+      }
+    })
+  ]
+
+  depends_on = [aws_iam_role.vault_irsa]
+}
+
+output "vault_irsa_role_arn" {
+  value = aws_iam_role.vault_irsa.arn
+}
