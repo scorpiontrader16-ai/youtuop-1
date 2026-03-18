@@ -1,0 +1,99 @@
+# ============================================================
+# أضف الـ targets دي في نهاية Makefile الموجود عندك
+# ============================================================
+SCHEMA_REGISTRY_URL ?= http://localhost:8081
+PROTO_DIR           ?= ./proto
+
+# ─── Schema ──────────────────────────────────────────────
+.PHONY: schema-register schema-list proto-gen
+
+schema-register: ## يسجل كل الـ proto schemas
+	SCHEMA_REGISTRY_URL=$(SCHEMA_REGISTRY_URL) \
+	PROTO_DIR=$(PROTO_DIR) \
+	bash ./scripts/register-schemas.sh
+
+schema-list: ## يعرض كل الـ registered subjects
+	@curl -s $(SCHEMA_REGISTRY_URL)/subjects | jq .
+
+proto-gen: ## يولد Go code من الـ proto files (يحتاج buf)
+	buf generate
+
+# ─── M4 Services ─────────────────────────────────────────
+.PHONY: m4-up m4-down m4-logs m4-status
+
+m4-up: ## يشغل M4 services كاملة (ClickHouse + MinIO + Schema Registry)
+	docker compose -f docker-compose.yml -f infra/docker-compose.m4.yml up -d
+	@echo "⏳ Waiting for services to be healthy..."
+	@sleep 10
+	@$(MAKE) db-migrate
+	@$(MAKE) schema-register
+	@echo ""
+	@echo "✅ M4 ready"
+	@echo "   ClickHouse  : http://localhost:8123/play"
+	@echo "   MinIO       : http://localhost:9001  (minioadmin/minioadmin123)"
+	@echo "   Redpanda    : http://localhost:8080  (console)"
+
+m4-down: ## يوقف M4 services
+	docker compose -f docker-compose.yml -f infra/docker-compose.m4.yml down
+
+m4-logs: ## يعرض logs الـ M4 services
+	docker compose -f docker-compose.yml -f infra/docker-compose.m4.yml \
+		logs -f clickhouse minio
+
+m4-status: ## يعرض حالة كل M4 services
+	@echo "=== ClickHouse ==="
+	@curl -sf http://localhost:8123/ping && echo "✅ UP" || echo "❌ DOWN"
+	@echo "=== MinIO ==="
+	@curl -sf http://localhost:9000/minio/health/live && echo "✅ UP" || echo "❌ DOWN"
+	@echo "=== Redpanda Schema Registry ==="
+	@curl -sf http://localhost:8081/subjects && echo "" && echo "✅ UP" || echo "❌ DOWN"
+
+# ─── Database Migrations ──────────────────────────────────
+.PHONY: db-migrate db-migrate-down db-migrate-status
+
+db-migrate: ## يشغّل Postgres migrations
+	GOOSE_MIGRATION_DIR=./services/ingestion/internal/postgres/migrations \
+	GOOSE_DBSTRING=$(POSTGRES_DSN) \
+	bash ./scripts/migrate.sh up
+
+db-migrate-down: ## يتراجع عن آخر migration
+	GOOSE_MIGRATION_DIR=./services/ingestion/internal/postgres/migrations \
+	GOOSE_DBSTRING=$(POSTGRES_DSN) \
+	bash ./scripts/migrate.sh down
+
+db-migrate-status: ## يعرض حالة الـ migrations
+	GOOSE_MIGRATION_DIR=./services/ingestion/internal/postgres/migrations \
+	GOOSE_DBSTRING=$(POSTGRES_DSN) \
+	bash ./scripts/migrate.sh status
+
+# ─── Tests ───────────────────────────────────────────────
+.PHONY: test-schema test-clickhouse test-postgres test-integration
+
+test-schema: ## integration tests للـ schema registry
+	SCHEMA_REGISTRY_URL=$(SCHEMA_REGISTRY_URL) \
+	go test -tags=integration -v -timeout=60s \
+		./services/ingestion/internal/schemaregistry/...
+
+test-clickhouse: ## integration tests للـ ClickHouse
+	go test -tags=integration -v -timeout=60s \
+		./services/ingestion/internal/clickhouse/...
+
+test-postgres: ## integration tests للـ Postgres
+	POSTGRES_DSN=$(POSTGRES_DSN) \
+	go test -tags=integration -v -timeout=60s \
+		./services/ingestion/internal/postgres/...
+
+test-integration: test-schema test-clickhouse test-postgres ## كل الـ integration tests
+	@echo "✅ All integration tests passed"
+
+# ─── Tiering ─────────────────────────────────────────────
+.PHONY: tiering-run
+
+tiering-run: ## يشغّل tiering job مرة واحدة يدوياً (للـ testing)
+	cd services/ingestion && \
+	POSTGRES_HOST=localhost \
+	MINIO_ENDPOINT=localhost:9000 \
+	go run ./cmd/tiering/...
+
+# ─── Variables ───────────────────────────────────────────
+POSTGRES_DSN ?= postgres://platform:platform@localhost:5432/platform?sslmode=disable
