@@ -191,7 +191,6 @@ jobs:
     needs: [ build-go ]
 
     services:
-      # ── Postgres ──────────────────────────────────────────
       postgres:
         image: postgres:16-alpine
         env:
@@ -207,10 +206,7 @@ jobs:
         ports:
           - 5432:5432
 
-      # ── ClickHouse ────────────────────────────────────────
-      # لا نستخدم health check هنا — بنعمل wait يدوي في الـ steps
-      # لأن clickhouse-server:alpine لا يحتوي على curl/wget في الـ PATH
-      # أثناء تشغيل الـ health check
+      # ClickHouse على port 8123 (HTTP) و 9100 (native) — نتجنب 9000
       clickhouse:
         image: clickhouse/clickhouse-server:24.3-alpine
         env:
@@ -219,10 +215,7 @@ jobs:
           CLICKHOUSE_PASSWORD: platform
         ports:
           - 8123:8123
-          - 9000:9000
-
-      # MinIO يشتغل يدوياً في step "Start MinIO"
-      # عشان نتحكم في الـ command والـ health check بشكل صحيح
+          - 9100:9000
 
     steps:
       - uses: actions/checkout@v4
@@ -233,10 +226,48 @@ jobs:
           go-version: '1.22'
           cache-dependency-path: services/ingestion/go.mod
 
-      - name: Install tools
+      - name: Install goose and mc
         run: |
           go install github.com/pressly/goose/v3/cmd/goose@latest
-          sudo apt-get install -y curl
+          # install minio mc client مباشرة على الـ runner
+          curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc \
+            -o /usr/local/bin/mc
+          chmod +x /usr/local/bin/mc
+
+      # ── MinIO — يشتغل بدون docker run ────────────────────
+      - name: Start MinIO server
+        run: |
+          # نزّل وشغّل MinIO binary مباشرة — port 9000 متاح لأن ClickHouse على 9100
+          curl -sSL https://dl.min.io/server/minio/release/linux-amd64/minio \
+            -o /usr/local/bin/minio
+          chmod +x /usr/local/bin/minio
+
+          mkdir -p /tmp/minio-data
+          MINIO_ROOT_USER=minioadmin \
+          MINIO_ROOT_PASSWORD=minioadmin123 \
+          nohup /usr/local/bin/minio server /tmp/minio-data \
+            --address ":9000" \
+            --console-address ":9001" \
+            > /tmp/minio.log 2>&1 &
+
+          echo "⏳ Waiting for MinIO..."
+          for i in $(seq 1 20); do
+            if curl -sf http://localhost:9000/minio/health/live; then
+              echo "✅ MinIO ready"
+              break
+            fi
+            echo "  attempt $i/20..."
+            sleep 2
+          done
+          curl -sf http://localhost:9000/minio/health/live || \
+            (cat /tmp/minio.log && echo "❌ MinIO not ready" && exit 1)
+
+      - name: Create MinIO buckets
+        run: |
+          mc alias set local http://localhost:9000 minioadmin minioadmin123
+          mc mb --ignore-existing local/parquet-archive
+          mc mb --ignore-existing local/cold-data
+          mc ls local
 
       # ── Wait for ClickHouse ────────────────────────────────
       - name: Wait for ClickHouse
@@ -248,53 +279,19 @@ jobs:
               break
             fi
             echo "  attempt $i/30..."
-            sleep 3
+            sleep 2
           done
-          curl -sf http://localhost:8123/ping || (echo "❌ ClickHouse not ready" && exit 1)
+          curl -sf http://localhost:8123/ping || \
+            (echo "❌ ClickHouse not ready" && exit 1)
 
-      # ── Start MinIO properly ───────────────────────────────
-      - name: Start MinIO
-        run: |
-          # port 9000 محجوز من ClickHouse — MinIO يشتغل على 9100
-          docker run -d \
-            --name minio-server \
-            -p 9100:9000 \
-            -e MINIO_ROOT_USER=minioadmin \
-            -e MINIO_ROOT_PASSWORD=minioadmin123 \
-            minio/minio:RELEASE.2024-06-13T22-53-53Z \
-            server /data
-
-          echo "⏳ Waiting for MinIO..."
-          for i in $(seq 1 20); do
-            if curl -sf http://localhost:9100/minio/health/live; then
-              echo "✅ MinIO ready"
-              break
-            fi
-            echo "  attempt $i/20..."
-            sleep 3
-          done
-          curl -sf http://localhost:9100/minio/health/live || (echo "❌ MinIO not ready" && exit 1)
-
-      # ── Setup MinIO buckets ────────────────────────────────
-      - name: Create MinIO buckets
-        run: |
-          docker run --rm --network host \
-            minio/mc:latest sh -c "
-              mc alias set local http://localhost:9100 minioadmin minioadmin123 &&
-              mc mb --ignore-existing local/parquet-archive &&
-              mc mb --ignore-existing local/cold-data &&
-              echo 'Buckets ready' &&
-              mc ls local
-            "
-
-      # ── Apply ClickHouse schema ────────────────────────────
       - name: Apply ClickHouse schema
         run: |
-          curl -sf http://localhost:8123/ \
+          # نستخدم default user (بدون password) لأنه دائماً موجود في ClickHouse
+          # platform user بيتعمل في init.sql نفسه
+          curl -sf "http://localhost:8123/?user=default" \
             --data-binary @infra/clickhouse/init.sql
           echo "✅ ClickHouse schema applied"
 
-      # ── Run Postgres migrations ────────────────────────────
       - name: Run Postgres migrations
         run: |
           goose \
@@ -304,7 +301,6 @@ jobs:
             up
           echo "✅ Postgres migrations applied"
 
-      # ── Run Integration Tests ──────────────────────────────
       - name: Run integration tests
         working-directory: services/ingestion
         env:
@@ -315,11 +311,11 @@ jobs:
           POSTGRES_PASSWORD:    platform
           POSTGRES_SSL_MODE:    disable
           CLICKHOUSE_HOST:      localhost
-          CLICKHOUSE_PORT:      "9000"
+          CLICKHOUSE_PORT:      "9100"
           CLICKHOUSE_DB:        events
           CLICKHOUSE_USER:      platform
           CLICKHOUSE_PASSWORD:  platform
-          MINIO_ENDPOINT:       localhost:9100
+          MINIO_ENDPOINT:       localhost:9000
           MINIO_ACCESS_KEY:     minioadmin
           MINIO_SECRET_KEY:     minioadmin123
           MINIO_USE_SSL:        "false"
