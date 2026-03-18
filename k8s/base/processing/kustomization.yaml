@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - serviceaccount.yaml
   - networkpolicy.yaml
+  - externalsecret.yaml
   - deployment.yaml
   - service.yaml
   - scaledobject.yaml
