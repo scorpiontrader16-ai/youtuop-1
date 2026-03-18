@@ -4,6 +4,7 @@ resources:
   - serviceaccount.yaml
   - networkpolicy.yaml
   - externalsecret.yaml
+  - poddisruptionbudget.yaml
   - deployment.yaml
   - service.yaml
   - scaledobject.yaml
