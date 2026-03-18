@@ -11,19 +11,16 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // pgx driver لـ database/sql
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 )
 
-// ملاحظة: الـ embed يدور على الملفات نسبةً لـ client.go
-// لذلك الـ migrations لازم تكون في:
-//   services/ingestion/internal/postgres/migrations/*.sql
-// وهي symlink أو copy من migrations/postgres/ في الـ project root
+// migrations/ موجودة في نفس الـ package directory:
+// services/ingestion/internal/postgres/migrations/
 //
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// Config إعدادات الاتصال بـ Postgres
 type Config struct {
 	Host         string
 	Port         int
@@ -36,7 +33,6 @@ type Config struct {
 	ConnLifetime time.Duration
 }
 
-// ConfigFromEnv يقرأ الإعدادات من environment variables
 func ConfigFromEnv() Config {
 	return Config{
 		Host:         getEnv("POSTGRES_HOST", "localhost"),
@@ -51,7 +47,6 @@ func ConfigFromEnv() Config {
 	}
 }
 
-// DSN يبني الـ connection string
 func (c Config) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%d dbname=%s user=%s password=%s sslmode=%s",
@@ -59,13 +54,11 @@ func (c Config) DSN() string {
 	)
 }
 
-// Client هو الـ Postgres connection pool
 type Client struct {
 	db     *sql.DB
 	logger *slog.Logger
 }
 
-// New ينشئ client جديد ويتحقق من الاتصال
 func New(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -94,7 +87,6 @@ func New(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, error) 
 	return &Client{db: db, logger: logger}, nil
 }
 
-// WaitForPostgres ينتظر الـ Postgres يكون ready (max 60s)
 func WaitForPostgres(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, error) {
 	if logger == nil {
 		logger = slog.Default()
@@ -105,7 +97,7 @@ func WaitForPostgres(ctx context.Context, cfg Config, logger *slog.Logger) (*Cli
 	for attempt := 1; attempt <= 30; attempt++ {
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("context cancelled while waiting for postgres: %w", ctx.Err())
+			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 		default:
 		}
 
@@ -125,7 +117,6 @@ func WaitForPostgres(ctx context.Context, cfg Config, logger *slog.Logger) (*Cli
 	return nil, fmt.Errorf("postgres not ready after 60s: %w", lastErr)
 }
 
-// Migrate يشغّل الـ goose migrations من الـ embedded FS
 func (c *Client) Migrate(ctx context.Context) error {
 	goose.SetLogger(goose.NopLogger())
 	goose.SetBaseFS(migrationsFS)
@@ -134,7 +125,6 @@ func (c *Client) Migrate(ctx context.Context) error {
 		return fmt.Errorf("set goose dialect: %w", err)
 	}
 
-	// "migrations" يطابق الـ embed path prefix
 	if err := goose.UpContext(ctx, c.db, "migrations"); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
@@ -143,7 +133,6 @@ func (c *Client) Migrate(ctx context.Context) error {
 	return nil
 }
 
-// MigrateDown يتراجع عن migration واحدة — للـ testing فقط
 func (c *Client) MigrateDown(ctx context.Context) error {
 	goose.SetBaseFS(migrationsFS)
 	if err := goose.SetDialect("postgres"); err != nil {
@@ -152,19 +141,11 @@ func (c *Client) MigrateDown(ctx context.Context) error {
 	return goose.DownContext(ctx, c.db, "migrations")
 }
 
-// DB يرجع الـ underlying *sql.DB للاستخدام المباشر
-func (c *Client) DB() *sql.DB {
-	return c.db
-}
+func (c *Client) DB() *sql.DB  { return c.db }
+func (c *Client) Close() error { return c.db.Close() }
 
-// Close يغلق الاتصال
-func (c *Client) Close() error {
-	return c.db.Close()
-}
+// ── WarmEvent Repository ───────────────────────────────────────────────────
 
-// ── Warm Events Repository ─────────────────────────────────────────────────
-
-// WarmEvent هو الـ struct اللي بيتكتب في Postgres
 type WarmEvent struct {
 	EventID       string
 	EventType     string
@@ -181,13 +162,11 @@ type WarmEvent struct {
 	IngestedAt    time.Time
 }
 
-// InsertWarmEvents يكتب batch من الـ events في Postgres بأقصى أداء
 func (c *Client) InsertWarmEvents(ctx context.Context, events []WarmEvent) error {
 	if len(events) == 0 {
 		return nil
 	}
 
-	// unnest approach: INSERT واحد بـ arrays — أسرع من multiple inserts
 	const query = `
 		INSERT INTO warm_events (
 			event_id,      event_type,    source,        schema_version,
@@ -196,16 +175,15 @@ func (c *Client) InsertWarmEvents(ctx context.Context, events []WarmEvent) error
 			occurred_at,   ingested_at
 		)
 		SELECT
-			UNNEST($1::TEXT[]),        UNNEST($2::TEXT[]),
-			UNNEST($3::TEXT[]),        UNNEST($4::TEXT[]),
-			UNNEST($5::TEXT[]),        UNNEST($6::TEXT[]),
-			UNNEST($7::TEXT[]),        UNNEST($8::TEXT[]),
-			UNNEST($9::INTEGER[]),     UNNEST($10::TEXT[]),
+			UNNEST($1::TEXT[]),         UNNEST($2::TEXT[]),
+			UNNEST($3::TEXT[]),         UNNEST($4::TEXT[]),
+			UNNEST($5::TEXT[]),         UNNEST($6::TEXT[]),
+			UNNEST($7::TEXT[]),         UNNEST($8::TEXT[]),
+			UNNEST($9::INTEGER[]),      UNNEST($10::TEXT[]),
 			UNNEST($11::TEXT[]),
 			UNNEST($12::TIMESTAMPTZ[]), UNNEST($13::TIMESTAMPTZ[])
 		ON CONFLICT (event_id) DO NOTHING`
 
-	// بني الـ 13 arrays — واحد لكل column
 	eventIDs      := make([]string,    len(events))
 	eventTypes    := make([]string,    len(events))
 	sources       := make([]string,    len(events))
@@ -236,7 +214,6 @@ func (c *Client) InsertWarmEvents(ctx context.Context, events []WarmEvent) error
 		ingestedAts[i]   = e.IngestedAt
 	}
 
-	// $1..$13 يطابقوا الـ 13 arrays بالترتيب
 	_, err := c.db.ExecContext(ctx, query,
 		eventIDs, eventTypes, sources, schemaVers,
 		tenantIDs, partitionKeys, contentTypes,
@@ -251,12 +228,10 @@ func (c *Client) InsertWarmEvents(ctx context.Context, events []WarmEvent) error
 	return nil
 }
 
-// MarkArchived يحدّث archived_at للـ events اللي انتقلت لـ S3
 func (c *Client) MarkArchived(ctx context.Context, eventIDs []string) error {
 	if len(eventIDs) == 0 {
 		return nil
 	}
-
 	_, err := c.db.ExecContext(ctx, `
 		UPDATE warm_events
 		SET    archived_at = NOW()
@@ -270,12 +245,11 @@ func (c *Client) MarkArchived(ctx context.Context, eventIDs []string) error {
 	return nil
 }
 
-// GetUnarchived يجيب الـ events اللي لسه ماتنقلتش لـ S3
 func (c *Client) GetUnarchived(ctx context.Context, olderThan time.Time, limit int) ([]WarmEvent, error) {
 	rows, err := c.db.QueryContext(ctx, `
-		SELECT event_id,    event_type,  source,      schema_version,
+		SELECT event_id,    event_type,    source,      schema_version,
 		       tenant_id,   partition_key, content_type,
-		       payload,     payload_bytes, trace_id,  span_id,
+		       payload,     payload_bytes, trace_id,    span_id,
 		       occurred_at, ingested_at
 		FROM   warm_events
 		WHERE  archived_at IS NULL
@@ -302,11 +276,9 @@ func (c *Client) GetUnarchived(ctx context.Context, olderThan time.Time, limit i
 		}
 		events = append(events, e)
 	}
-
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error: %w", err)
+		return nil, fmt.Errorf("rows error: %w", err)
 	}
-
 	return events, nil
 }
 
