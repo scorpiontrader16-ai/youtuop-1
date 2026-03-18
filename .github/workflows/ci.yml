@@ -99,6 +99,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: go
+          upload: never
 
   semgrep:
     name: Semgrep Analysis
