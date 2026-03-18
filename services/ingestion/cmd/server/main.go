@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -28,6 +29,8 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
+
+	chwriter "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/clickhouse"
 )
 
 var version = "dev"
@@ -54,6 +57,11 @@ var (
 	eventsProcessedTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "ingestion_events_processed_total",
 		Help: "Total number of events processed",
+	})
+
+	eventsDroppedTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ingestion_events_dropped_total",
+		Help: "Total number of events dropped (buffer full)",
 	})
 
 	circuitBreakerState = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -96,10 +104,7 @@ func newCircuitBreaker(name string, log *zap.Logger) *gobreaker.CircuitBreaker {
 	})
 }
 
-// ── Structured Errors ─────────────────────────────────────────────────────
-
-// ErrRateLimited is returned by the gRPC interceptor and HTTP handler
-// when the rate limiter rejects a request.
+// ErrRateLimited is returned when the rate limiter rejects a request.
 var ErrRateLimited = status.Error(codes.ResourceExhausted, "rate limit exceeded, try again later")
 
 func main() {
@@ -117,6 +122,7 @@ func main() {
 		log.Fatal("invalid config", zap.Error(err))
 	}
 
+	// ── OpenTelemetry ─────────────────────────────────────────────────────
 	tp, err := initTracer(cfg.OTLPEndpoint)
 	if err != nil {
 		log.Fatal("failed to init tracer", zap.Error(err))
@@ -128,12 +134,40 @@ func main() {
 	}()
 	otel.SetTracerProvider(tp)
 
+	// ── ClickHouse Buffered Writer ─────────────────────────────────────────
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer startupCancel()
+
+	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	chConn, err := chwriter.WaitForClickHouse(startupCtx, chwriter.ConfigFromEnv(), slogLogger)
+	if err != nil {
+		log.Warn("clickhouse unavailable — events will not be persisted to hot store",
+			zap.Error(err),
+		)
+	}
+
+	var bufWriter *chwriter.BufferedWriter
+	if chConn != nil {
+		// FIX: ترتيب الـ defer مهم — LIFO
+		// bufWriter.Close() لازم يتنفذ قبل chConn.Close()
+		// عشان الـ buffer يخلص الـ flush قبل ما الـ connection يتقفل
+		defer chConn.Close()              // ينفذ ثانياً
+		bufWriter = chwriter.NewBufferedWriter(chConn, chwriter.DefaultBufferConfig(), slogLogger)
+		defer bufWriter.Close()           // ينفذ أولاً
+		log.Info("clickhouse buffered writer ready")
+	}
+
+	// ── Circuit Breakers ──────────────────────────────────────────────────
 	redpandaCB := newCircuitBreaker("redpanda", log)
 	processingCB := newCircuitBreaker("processing-grpc", log)
 
 	// Rate limiter: 1000 req/s with burst of 100
 	limiter := rate.NewLimiter(1000, 100)
 
+	// ── gRPC Server ───────────────────────────────────────────────────────
 	grpcServer := grpc.NewServer(
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle: 5 * time.Minute,
@@ -152,16 +186,15 @@ func main() {
 	healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 	reflection.Register(grpcServer)
 
+	// ── HTTP Routes ───────────────────────────────────────────────────────
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 
-	// ── Liveness ──────────────────────────────────────────────────────────
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "ok")
 	})
 
-	// ── Readiness ─────────────────────────────────────────────────────────
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
@@ -201,10 +234,10 @@ func main() {
 		fmt.Fprint(w, "ready")
 	})
 
-	// ── Events endpoint ───────────────────────────────────────────────────
+	// ── Events Endpoint (Hot Path) ────────────────────────────────────────
 	mux.HandleFunc("/v1/events", func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		path := "/v1/events"
+		const path = "/v1/events"
 		defer func() {
 			httpRequestDuration.WithLabelValues(r.Method, path).Observe(time.Since(start).Seconds())
 		}()
@@ -215,12 +248,45 @@ func main() {
 			return
 		}
 
-		// Rate limiting
 		if !limiter.Allow() {
 			rateLimitRejectedTotal.Inc()
 			httpRequestsTotal.WithLabelValues(r.Method, path, "429").Inc()
-			http.Error(w, ErrRateLimited.Error(), http.StatusTooManyRequests)
+			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 			return
+		}
+
+		eventID := fmt.Sprintf("evt-%d", time.Now().UnixNano())
+		now := time.Now().UTC()
+
+		// كتابة في ClickHouse (non-blocking via buffer)
+		if bufWriter != nil {
+			// FIX: r.ContentLength بيكون -1 لو الـ header مش موجود
+			var payloadBytes uint32
+			if r.ContentLength > 0 {
+				payloadBytes = uint32(r.ContentLength)
+			}
+
+			row := chwriter.EventRow{
+				EventID:       eventID,
+				EventType:     r.Header.Get("X-Event-Type"),
+				Source:        r.Header.Get("X-Event-Source"),
+				SchemaVersion: r.Header.Get("X-Schema-Version"),
+				OccurredAt:    now,
+				IngestedAt:    now,
+				TenantID:      r.Header.Get("X-Tenant-ID"),
+				PartitionKey:  r.Header.Get("X-Partition-Key"),
+				ContentType:   r.Header.Get("Content-Type"),
+				Payload:       "",
+				PayloadBytes:  payloadBytes,
+				TraceID:       r.Header.Get("X-Trace-ID"),
+				SpanID:        r.Header.Get("X-Span-ID"),
+				MetaKeys:      []string{},
+				MetaValues:    []string{},
+			}
+
+			if !bufWriter.Enqueue(row) {
+				eventsDroppedTotal.Inc()
+			}
 		}
 
 		eventsProcessedTotal.Inc()
@@ -228,7 +294,7 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"event_id":"evt-%d","accepted":true}`, time.Now().UnixNano())
+		fmt.Fprintf(w, `{"event_id":%q,"accepted":true}`, eventID)
 	})
 
 	httpServer := &http.Server{
@@ -258,6 +324,7 @@ func main() {
 		}
 	}()
 
+	// ── Graceful Shutdown ─────────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
