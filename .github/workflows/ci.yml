@@ -19,6 +19,8 @@ jobs:
 
       - name: Setup buf
         uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Lint proto files
         working-directory: proto
@@ -206,7 +208,6 @@ jobs:
         ports:
           - 5432:5432
 
-      # ClickHouse على port 8123 (HTTP) و 9100 (native) — نتجنب 9000
       clickhouse:
         image: clickhouse/clickhouse-server:24.3-alpine
         env:
@@ -226,22 +227,23 @@ jobs:
           go-version: '1.22'
           cache-dependency-path: services/ingestion/go.mod
 
-      - name: Install goose and mc
+      - name: Install tools
         run: |
+          # goose
           go install github.com/pressly/goose/v3/cmd/goose@latest
-          # install minio mc client مباشرة على الـ runner
+          # clickhouse-client — لإرسال multi-statement SQL
+          sudo apt-get install -y clickhouse-client || \
+            (curl -sSL https://clickhouse.com/ | sh && \
+             sudo install -m 755 clickhouse /usr/local/bin/clickhouse-client)
+          # mc client للـ MinIO
           curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc \
-            -o /usr/local/bin/mc
-          chmod +x /usr/local/bin/mc
-
-      # ── MinIO — يشتغل بدون docker run ────────────────────
-      - name: Start MinIO server
-        run: |
-          # نزّل وشغّل MinIO binary مباشرة — port 9000 متاح لأن ClickHouse على 9100
+            -o /usr/local/bin/mc && chmod +x /usr/local/bin/mc
+          # minio server binary
           curl -sSL https://dl.min.io/server/minio/release/linux-amd64/minio \
-            -o /usr/local/bin/minio
-          chmod +x /usr/local/bin/minio
+            -o /usr/local/bin/minio && chmod +x /usr/local/bin/minio
 
+      - name: Start MinIO
+        run: |
           mkdir -p /tmp/minio-data
           MINIO_ROOT_USER=minioadmin \
           MINIO_ROOT_PASSWORD=minioadmin123 \
@@ -250,17 +252,14 @@ jobs:
             --console-address ":9001" \
             > /tmp/minio.log 2>&1 &
 
-          echo "⏳ Waiting for MinIO..."
           for i in $(seq 1 20); do
             if curl -sf http://localhost:9000/minio/health/live; then
-              echo "✅ MinIO ready"
-              break
+              echo "✅ MinIO ready"; break
             fi
-            echo "  attempt $i/20..."
             sleep 2
           done
           curl -sf http://localhost:9000/minio/health/live || \
-            (cat /tmp/minio.log && echo "❌ MinIO not ready" && exit 1)
+            (cat /tmp/minio.log && exit 1)
 
       - name: Create MinIO buckets
         run: |
@@ -269,27 +268,25 @@ jobs:
           mc mb --ignore-existing local/cold-data
           mc ls local
 
-      # ── Wait for ClickHouse ────────────────────────────────
       - name: Wait for ClickHouse
         run: |
-          echo "⏳ Waiting for ClickHouse..."
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8123/ping; then
-              echo "✅ ClickHouse ready"
-              break
+            if curl -sf "http://localhost:8123/ping"; then
+              echo "✅ ClickHouse ready"; break
             fi
-            echo "  attempt $i/30..."
             sleep 2
           done
-          curl -sf http://localhost:8123/ping || \
-            (echo "❌ ClickHouse not ready" && exit 1)
+          curl -sf "http://localhost:8123/ping" || exit 1
 
       - name: Apply ClickHouse schema
         run: |
-          # نستخدم default user (بدون password) لأنه دائماً موجود في ClickHouse
-          # platform user بيتعمل في init.sql نفسه
-          curl -sf "http://localhost:8123/?user=default" \
-            --data-binary @infra/clickhouse/init.sql
+          # clickhouse-client يدعم multi-statement SQL بشكل مضمون
+          clickhouse-client \
+            --host localhost \
+            --port 9100 \
+            --user default \
+            --multiquery \
+            < infra/clickhouse/init.sql
           echo "✅ ClickHouse schema applied"
 
       - name: Run Postgres migrations
