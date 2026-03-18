@@ -255,32 +255,32 @@ jobs:
       # ── Start MinIO properly ───────────────────────────────
       - name: Start MinIO
         run: |
+          # port 9000 محجوز من ClickHouse — MinIO يشتغل على 9100
           docker run -d \
             --name minio-server \
-            -p 9000:9000 \
-            -p 9001:9001 \
+            -p 9100:9000 \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin123 \
             minio/minio:RELEASE.2024-06-13T22-53-53Z \
-            server /data --console-address ":9001"
+            server /data
 
           echo "⏳ Waiting for MinIO..."
           for i in $(seq 1 20); do
-            if curl -sf http://localhost:9000/minio/health/live; then
+            if curl -sf http://localhost:9100/minio/health/live; then
               echo "✅ MinIO ready"
               break
             fi
             echo "  attempt $i/20..."
             sleep 3
           done
-          curl -sf http://localhost:9000/minio/health/live || (echo "❌ MinIO not ready" && exit 1)
+          curl -sf http://localhost:9100/minio/health/live || (echo "❌ MinIO not ready" && exit 1)
 
       # ── Setup MinIO buckets ────────────────────────────────
       - name: Create MinIO buckets
         run: |
           docker run --rm --network host \
             minio/mc:latest sh -c "
-              mc alias set local http://localhost:9000 minioadmin minioadmin123 &&
+              mc alias set local http://localhost:9100 minioadmin minioadmin123 &&
               mc mb --ignore-existing local/parquet-archive &&
               mc mb --ignore-existing local/cold-data &&
               echo 'Buckets ready' &&
@@ -319,7 +319,7 @@ jobs:
           CLICKHOUSE_DB:        events
           CLICKHOUSE_USER:      platform
           CLICKHOUSE_PASSWORD:  platform
-          MINIO_ENDPOINT:       localhost:9000
+          MINIO_ENDPOINT:       localhost:9100
           MINIO_ACCESS_KEY:     minioadmin
           MINIO_SECRET_KEY:     minioadmin123
           MINIO_USE_SSL:        "false"
