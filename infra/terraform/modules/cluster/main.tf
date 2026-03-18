@@ -185,3 +185,43 @@ output "kms_key_id" {
 output "github_actions_role_arn" {
   value = aws_iam_role.github_actions.arn
 }
+# OIDC Provider for IRSA (EKS pods)
+data "tls_certificate" "eks" {
+  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
+}
+
+# cert-manager via Helm
+resource "helm_release" "cert_manager" {
+  name             = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager"
+  version          = "v1.14.4"
+  namespace        = "cert-manager"
+  create_namespace = true
+
+  set {
+    name  = "installCRDs"
+    value = "true"
+  }
+
+  set {
+    name  = "global.leaderElection.namespace"
+    value = "cert-manager"
+  }
+
+  depends_on = [aws_eks_node_group.arm64]
+}
+
+output "oidc_provider_arn" {
+  value = aws_iam_openid_connect_provider.eks.arn
+}
+
+output "oidc_provider_url" {
+  value = aws_iam_openid_connect_provider.eks.url
+}
