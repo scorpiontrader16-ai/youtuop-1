@@ -24,6 +24,48 @@ jobs:
         working-directory: proto
         run: buf lint
 
+  gitleaks:
+    name: Gitleaks Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trivy-ingestion:
+    name: Trivy — Ingestion Service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy on ingestion
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          scan-type: fs
+          scan-ref: services/ingestion
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+          format: table
+
+  trivy-processing:
+    name: Trivy — Processing Service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy on processing
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          scan-type: fs
+          scan-ref: services/processing
+          severity: CRITICAL,HIGH
+          exit-code: 1
+          ignore-unfixed: true
+          format: table
+
   build-go:
     name: Go — Ingestion Service
     runs-on: ubuntu-latest
@@ -114,7 +156,7 @@ jobs:
         run: |
           for dir in infra/terraform/modules/*/; do
             if [ -d "$dir" ]; then
-              echo "→ Validating: $dir"
+              echo "Validating: $dir"
               terraform -chdir="$dir" init -backend=false
               terraform -chdir="$dir" validate
             fi
@@ -182,7 +224,6 @@ jobs:
           go-version: '1.22'
           cache-dependency-path: services/ingestion/go.mod
 
-      # ✅ هذه هي الخطوة الجديدة
       - name: Tidy dependencies
         working-directory: services/ingestion
         run: go mod tidy
@@ -198,13 +239,13 @@ jobs:
         run: |
           for i in $(seq 1 30); do
             if pg_isready -h localhost -p 5432 -U platform; then
-              echo "✅ Postgres ready"
+              echo "Postgres ready"
               exit 0
             fi
             echo "Waiting for Postgres... ($i/30)"
             sleep 2
           done
-          echo "❌ Postgres not ready"
+          echo "Postgres not ready"
           exit 1
 
       - name: Wait for ClickHouse
@@ -212,30 +253,28 @@ jobs:
           for i in $(seq 1 30); do
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u platform:platform http://localhost:8123/ping 2>/dev/null || echo "failed")
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ ClickHouse ready"
+              echo "ClickHouse ready"
               exit 0
             fi
             echo "Waiting for ClickHouse... ($i/30) HTTP: $HTTP_CODE"
             sleep 2
           done
-          echo "❌ ClickHouse not ready"
+          echo "ClickHouse not ready"
           exit 1
 
       - name: Setup ClickHouse Schema
         run: |
-          echo "📦 Creating database if not exists..."
           curl -sS -u platform:platform "http://localhost:8123/" \
             -d "CREATE DATABASE IF NOT EXISTS events" || {
-              echo "❌ Failed to create database"
+              echo "Failed to create database"
               exit 1
             }
-          
+
           if [ ! -f infra/clickhouse/init.sql ]; then
-            echo "⚠️ init.sql not found, skipping schema application"
+            echo "init.sql not found, skipping schema application"
             exit 0
           fi
-          
-          echo "📄 Applying schema from init.sql..."
+
           FAILED=0
           CURRENT_QUERY=""
           while IFS= read -r line || [ -n "$line" ]; do
@@ -248,30 +287,27 @@ jobs:
             fi
             if [[ "$trimmed_line" == *\; ]]; then
               query_to_exec="${CURRENT_QUERY%;}"
-              echo "   Executing: ${query_to_exec:0:80}..."
               RESPONSE=$(curl -s -w "\n%{http_code}" -u platform:platform \
                 "http://localhost:8123/?database=events" -d "$query_to_exec")
               HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
               BODY=$(echo "$RESPONSE" | sed '$d')
               if [ "$HTTP_CODE" != "200" ]; then
-                echo "   ❌ Failed (HTTP $HTTP_CODE): $BODY"
+                echo "Failed (HTTP $HTTP_CODE): $BODY"
                 FAILED=1
-              else
-                echo "   ✅ Success"
               fi
               CURRENT_QUERY=""
             fi
           done < infra/clickhouse/init.sql
-          
+
           if [ -n "$CURRENT_QUERY" ]; then
-            echo "⚠️ Ignoring incomplete query at end of file: $CURRENT_QUERY"
+            echo "Ignoring incomplete query at end of file"
           fi
-          
+
           if [ $FAILED -eq 1 ]; then
-            echo "❌ Schema application failed"
+            echo "Schema application failed"
             exit 1
           fi
-          echo "✅ ClickHouse schema applied successfully"
+
           curl -sS -u platform:platform "http://localhost:8123/?database=events" -d "SHOW TABLES"
 
       - name: Run Postgres migrations
@@ -281,7 +317,6 @@ jobs:
             postgres \
             "postgres://platform:platform@localhost:5432/platform?sslmode=disable" \
             up
-          echo "✅ Postgres migrations applied"
 
       - name: Run integration tests
         working-directory: services/ingestion
@@ -304,5 +339,5 @@ jobs:
               ./internal/clickhouse/... \
               ./internal/postgres/...
           else
-            echo "⚠️ No integration test directories found"
+            echo "No integration test directories found"
           fi
