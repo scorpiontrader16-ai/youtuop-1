@@ -231,6 +231,10 @@ jobs:
         run: |
           # goose
           go install github.com/pressly/goose/v3/cmd/goose@latest
+          # clickhouse-client — لإرسال multi-statement SQL
+          sudo apt-get install -y clickhouse-client || \
+            (curl -sSL https://clickhouse.com/ | sh && \
+             sudo install -m 755 clickhouse /usr/local/bin/clickhouse-client)
           # mc client للـ MinIO
           curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc \
             -o /usr/local/bin/mc && chmod +x /usr/local/bin/mc
@@ -276,20 +280,13 @@ jobs:
 
       - name: Apply ClickHouse schema
         run: |
-          # Use HTTP interface — more reliable than installing clickhouse-client
-          # Splits multi-statement SQL and sends each statement separately
-          while IFS= read -r line || [[ -n "$line" ]]; do
-            trimmed="${line#"${line%%[![:space:]]*}"}"
-            [[ -z "$trimmed" || "$trimmed" == --* ]] && continue
-            stmt="$stmt $trimmed"
-            if [[ "$trimmed" == *";" ]]; then
-              curl -sf "http://localhost:8123/" \
-                -u "platform:platform" \
-                -d "$stmt" \
-                --get --data-urlencode "database=events" || exit 1
-              stmt=""
-            fi
-          done < infra/clickhouse/init.sql
+          # clickhouse-client يدعم multi-statement SQL بشكل مضمون
+          clickhouse-client \
+            --host localhost \
+            --port 9100 \
+            --user default \
+            --multiquery \
+            < infra/clickhouse/init.sql
           echo "✅ ClickHouse schema applied"
 
       - name: Run Postgres migrations
