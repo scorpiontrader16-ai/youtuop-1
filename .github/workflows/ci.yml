@@ -17,8 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup buf
-        uses: bufbuild/buf-setup-action@v1.5.0
+        uses: bufbuild/buf-setup-action@v1
         with:
+          version: '1.32.2'
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Lint proto files
         working-directory: proto
@@ -32,7 +33,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2.3.4
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -69,7 +70,6 @@ jobs:
   codeql:
     name: CodeQL — Go Analysis
     runs-on: ubuntu-latest
-    continue-on-error: true
     permissions:
       actions: read
       contents: read
@@ -86,7 +86,6 @@ jobs:
         with:
           languages: go
           queries: security-and-quality
-          tools: latest
       - name: Tidy dependencies
         working-directory: services/ingestion
         run: go mod tidy
@@ -98,6 +97,7 @@ jobs:
             -trimpath \
             ./cmd/server
       - name: Perform CodeQL Analysis
+        continue-on-error: true
         uses: github/codeql-action/analyze@v3
         with:
           category: go
@@ -112,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Semgrep
-        uses: semgrep/semgrep-action@v2
+        uses: semgrep/semgrep-action@v1
         with:
           config: >-
             p/golang
@@ -235,7 +235,7 @@ jobs:
           find k8s -name "*.yaml" ! -name "kustomization.yaml" -exec \
             kubeconform -summary -strict {} \;
       - name: Setup kustomize
-        uses: imranismail/setup-kustomize@v2.1.0
+        uses: imranismail/setup-kustomize@v2
       - name: Validate kustomize overlays
         run: |
           kustomize build k8s/overlays/production/ingestion > /dev/null
