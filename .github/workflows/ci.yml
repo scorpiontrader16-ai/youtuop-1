@@ -11,43 +11,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ════════════════════════════════════════
-  # 1️⃣  Proto Lint
-  # ════════════════════════════════════════
   lint-proto:
     name: Proto Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup buf
         uses: bufbuild/buf-setup-action@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Lint proto files
         working-directory: proto
         run: buf lint
 
-  # ════════════════════════════════════════
-  # 2️⃣  Go — Ingestion Service
-  # ════════════════════════════════════════
   build-go:
     name: Go — Ingestion Service
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Go 1.22
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           cache-dependency-path: services/ingestion/go.mod
-
       - name: Tidy dependencies
         working-directory: services/ingestion
         run: go mod tidy
-
       - name: Build
         working-directory: services/ingestion
         run: |
@@ -55,25 +44,19 @@ jobs:
             -ldflags="-s -w -X main.version=ci" \
             -trimpath \
             ./cmd/server
-
       - name: Vet
         working-directory: services/ingestion
         run: go vet ./...
-
       - name: Test
         working-directory: services/ingestion
         run: go test ./... -timeout 60s
 
-  # ════════════════════════════════════════
-  # 3️⃣  Rust — Processing Service
-  # ════════════════════════════════════════
   build-rust:
     name: Rust — Processing Service
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
       - name: Install system dependencies
         run: |
           sudo apt-get update -q
@@ -84,13 +67,11 @@ jobs:
             libcurl4-openssl-dev \
             libsasl2-dev \
             cmake
-
       - name: Setup Rust 1.85
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.85.0'
           components: clippy
-
       - name: Cache Cargo
         uses: actions/cache@v4
         with:
@@ -100,45 +81,35 @@ jobs:
             services/processing/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('services/processing/Cargo.toml') }}
           restore-keys: ${{ runner.os }}-cargo-
-
       - name: Build
         working-directory: services/processing
         run: cargo build --release
-
       - name: Test
         working-directory: services/processing
         run: cargo test
-
       - name: Clippy
         working-directory: services/processing
         run: cargo clippy -- -D warnings
 
-  # ════════════════════════════════════════
-  # 4️⃣  Terraform Validate
-  # ════════════════════════════════════════
   validate-terraform:
     name: Terraform Validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Terraform 1.7
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.7.0'
-
       - name: Validate Production
         working-directory: infra/terraform/environments/production
         run: |
           terraform init -backend=false
           terraform validate
-
       - name: Validate Staging
         working-directory: infra/terraform/environments/staging
         run: |
           terraform init -backend=false
           terraform validate
-
       - name: Validate Modules
         run: |
           for dir in infra/terraform/modules/*/; do
@@ -149,40 +120,28 @@ jobs:
             fi
           done
 
-  # ════════════════════════════════════════
-  # 5️⃣  Kubernetes Validate (بدون cluster)
-  # ════════════════════════════════════════
   validate-k8s:
     name: Kubernetes Validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install kubeconform
         run: |
           wget https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz
           tar -xzf kubeconform-linux-amd64.tar.gz
           chmod +x kubeconform
           sudo mv kubeconform /usr/local/bin/
-
       - name: Validate all Kubernetes manifests
         run: |
           find k8s -name "*.yaml" ! -name "kustomization.yaml" -exec \
             kubeconform -summary -strict {} \;
-
       - name: Setup kustomize
         uses: imranismail/setup-kustomize@v2
-
-      - name: Validate kustomize overlays (by building)
+      - name: Validate kustomize overlays
         run: |
-          echo "→ Building production/ingestion overlay"
           kustomize build k8s/overlays/production/ingestion > /dev/null
-          echo "→ Building production/processing overlay"
           kustomize build k8s/overlays/production/processing > /dev/null
 
-  # ════════════════════════════════════════
-  # 6️⃣  Integration Tests
-  # ════════════════════════════════════════
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
@@ -213,7 +172,6 @@ jobs:
         ports:
           - 8123:8123
           - 9000:9000
-        # لا نضع health-check هنا لننتظر يدوياً في الخطوات التالية
 
     steps:
       - uses: actions/checkout@v4
@@ -244,27 +202,18 @@ jobs:
           echo "❌ Postgres not ready"
           exit 1
 
-      - name: Wait for ClickHouse (with logs on failure)
+      - name: Wait for ClickHouse
         run: |
-          # دالة لجلب logs الحاوية إذا فشلت
-          fetch_logs() {
-            echo "📋 ClickHouse container logs:"
-            docker logs $(docker ps -q --filter "ancestor=clickhouse/clickhouse-server:24.3-alpine") 2>&1 || true
-          }
-          
           for i in $(seq 1 30); do
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u platform:platform http://localhost:8123/ping 2>/dev/null || echo "failed")
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ ClickHouse ready (HTTP 200)"
-              fetch_logs
+              echo "✅ ClickHouse ready"
               exit 0
             fi
             echo "Waiting for ClickHouse... ($i/30) HTTP: $HTTP_CODE"
             sleep 2
           done
-          
-          echo "❌ ClickHouse failed to respond"
-          fetch_logs
+          echo "❌ ClickHouse not ready"
           exit 1
 
       - name: Setup ClickHouse Schema
@@ -278,29 +227,45 @@ jobs:
           
           if [ ! -f infra/clickhouse/init.sql ]; then
             echo "⚠️ init.sql not found, skipping schema application"
-            # هنا الخروج بـ 0 لأن عدم وجود الملف ليس خطأ في CI نفسه (ربما migration يتم عبر وسيلة أخرى)
             exit 0
           fi
           
           echo "📄 Applying schema from init.sql..."
           FAILED=0
+          CURRENT_QUERY=""
           while IFS= read -r line || [ -n "$line" ]; do
-            # تخطي التعليقات (تبدأ بـ --) والأسطر الفارغة أو التي تحتوي فقط على ;
-            if [[ "$line" =~ ^-- ]] || [[ -z "${line// /}" ]] || [[ "$line" =~ ^\;+$ ]]; then
+            # تجاهل التعليقات التي تبدأ بـ --
+            if [[ "$line" =~ ^[[:space:]]*-- ]]; then
               continue
             fi
-            echo "   Executing: ${line:0:60}..."
-            RESPONSE=$(curl -s -w "\n%{http_code}" -u platform:platform \
-              "http://localhost:8123/?database=events" -d "$line")
-            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-            BODY=$(echo "$RESPONSE" | sed '$d')
-            if [ "$HTTP_CODE" != "200" ]; then
-              echo "   ❌ Failed (HTTP $HTTP_CODE): $BODY"
-              FAILED=1
-            else
-              echo "   ✅ Success"
+            
+            # إزالة المسافات الزائدة
+            trimmed_line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            if [[ -n "$trimmed_line" ]]; then
+              CURRENT_QUERY="$CURRENT_QUERY $trimmed_line"
+            fi
+            
+            # إذا انتهى السطر بفاصلة منقوطة، ننفذ الاستعلام المتراكم
+            if [[ "$trimmed_line" == *\; ]]; then
+              query_to_exec="${CURRENT_QUERY%;}"
+              echo "   Executing: ${query_to_exec:0:80}..."
+              RESPONSE=$(curl -s -w "\n%{http_code}" -u platform:platform \
+                "http://localhost:8123/?database=events" -d "$query_to_exec")
+              HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+              BODY=$(echo "$RESPONSE" | sed '$d')
+              if [ "$HTTP_CODE" != "200" ]; then
+                echo "   ❌ Failed (HTTP $HTTP_CODE): $BODY"
+                FAILED=1
+              else
+                echo "   ✅ Success"
+              fi
+              CURRENT_QUERY=""
             fi
           done < infra/clickhouse/init.sql
+          
+          if [ -n "$CURRENT_QUERY" ]; then
+            echo "⚠️ Ignoring incomplete query at end of file: $CURRENT_QUERY"
+          fi
           
           if [ $FAILED -eq 1 ]; then
             echo "❌ Schema application failed"
@@ -327,22 +292,13 @@ jobs:
           POSTGRES_USER: platform
           POSTGRES_PASSWORD: platform
           POSTGRES_SSL_MODE: disable
-
           CLICKHOUSE_HOST: localhost
           CLICKHOUSE_HTTP_PORT: "8123"
           CLICKHOUSE_TCP_PORT: "9000"
           CLICKHOUSE_DB: events
           CLICKHOUSE_USER: platform
           CLICKHOUSE_PASSWORD: platform
-
-          MINIO_ENDPOINT: localhost:9000
-          MINIO_ACCESS_KEY: minioadmin
-          MINIO_SECRET_KEY: minioadmin123
-          MINIO_USE_SSL: "false"
-          MINIO_BUCKET_PARQUET: parquet-archive
-          MINIO_PREFIX: events
         run: |
-          # تحقق من وجود مجلدات الاختبارات قبل التشغيل
           if [ -d "./internal/clickhouse" ] || [ -d "./internal/postgres" ]; then
             go test -tags=integration -v -timeout=120s \
               ./internal/clickhouse/... \
