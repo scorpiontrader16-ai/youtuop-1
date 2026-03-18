@@ -1,12 +1,4 @@
 apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: processing
-  namespace: platform
-  labels:
-    app: processing
----
-apiVersion: v1
 kind: Service
 metadata:
   name: processing
