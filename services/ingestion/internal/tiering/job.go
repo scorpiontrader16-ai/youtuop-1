@@ -12,22 +12,17 @@ import (
 )
 
 const (
-	// defaultBatchSize — عدد الـ records لكل Parquet file
-	defaultBatchSize = 10_000
-	// defaultColdThreshold — عمر البيانات قبل ما تنتقل لـ Cold
-	defaultColdThreshold = 30 * 24 * time.Hour // 30 يوم
-	// defaultTickInterval — كم مرة بيشتغل الـ job
-	defaultTickInterval = 1 * time.Hour
+	defaultBatchSize     = 10_000
+	defaultColdThreshold = 30 * 24 * time.Hour
+	defaultTickInterval  = 1 * time.Hour
 )
 
-// Config إعدادات الـ tiering job
 type Config struct {
 	BatchSize     int
 	ColdThreshold time.Duration
 	TickInterval  time.Duration
 }
 
-// DefaultConfig إعدادات enterprise افتراضية
 func DefaultConfig() Config {
 	return Config{
 		BatchSize:     defaultBatchSize,
@@ -36,7 +31,6 @@ func DefaultConfig() Config {
 	}
 }
 
-// Job هو الـ background goroutine اللي بينقل البيانات من Warm لـ Cold
 type Job struct {
 	pg     *postgres.Client
 	cold   *coldstore.Writer
@@ -44,7 +38,6 @@ type Job struct {
 	logger *slog.Logger
 }
 
-// New ينشئ tiering job جديد
 func New(
 	pg     *postgres.Client,
 	cold   *coldstore.Writer,
@@ -62,7 +55,6 @@ func New(
 	}
 }
 
-// Run يشغّل الـ job في loop حتى الـ context يتلغى
 func (j *Job) Run(ctx context.Context) {
 	j.logger.Info("tiering job started",
 		"batch_size",     j.cfg.BatchSize,
@@ -70,7 +62,6 @@ func (j *Job) Run(ctx context.Context) {
 		"tick_interval",  j.cfg.TickInterval,
 	)
 
-	// شغّل مرة فور الـ startup
 	if err := j.runOnce(ctx); err != nil {
 		j.logger.Error("tiering run failed", "error", err)
 	}
@@ -91,22 +82,27 @@ func (j *Job) Run(ctx context.Context) {
 	}
 }
 
-// runOnce ينفذ دورة كاملة من الـ Warm → Cold archival
 func (j *Job) runOnce(ctx context.Context) error {
 	olderThan := time.Now().UTC().Add(-j.cfg.ColdThreshold)
 
 	j.logger.Info("tiering run started", "older_than", olderThan)
 
+	// ✅ أولاً: أكمل أي records عالقة من runs سابقة
+	if err := j.pg.RecoverPendingArchive(ctx); err != nil {
+		j.logger.Error("recover pending archive failed", "error", err)
+		// لا نوقف — نكمل الـ run الطبيعي
+	}
+
 	totalMoved := 0
 
 	for {
-		// 1. جيب batch من الـ warm events اللي لسه ماتأرشفتش
+		// 1. جيب batch — يتجاهل اللي عنده parquet_key أو archived_at
 		events, err := j.pg.GetUnarchived(ctx, olderThan, j.cfg.BatchSize)
 		if err != nil {
 			return fmt.Errorf("get unarchived events: %w", err)
 		}
 		if len(events) == 0 {
-			break // خلصنا
+			break
 		}
 
 		// 2. حوّل لـ Parquet records
@@ -118,18 +114,23 @@ func (j *Job) runOnce(ctx context.Context) error {
 			return fmt.Errorf("write parquet: %w", err)
 		}
 
-		// 4. حدّث الـ archived_at في Postgres
 		eventIDs := make([]string, len(events))
 		for i, e := range events {
 			eventIDs[i] = e.EventID
 		}
 
+		// 4. ✅ سجّل الـ parquet_key أولاً — نقطة الأمان
+		if err := j.pg.RecordParquetKey(ctx, eventIDs, key); err != nil {
+			return fmt.Errorf("record parquet key (key=%s): %w", key, err)
+		}
+
+		// 5. حدّث archived_at
 		if err := j.pg.MarkArchived(ctx, eventIDs); err != nil {
-			// نـ log بس ما نوقفش — الـ Parquet file اتكتب بالفعل
-			j.logger.Error("mark archived failed — parquet written but postgres not updated",
-				"key",      key,
-				"count",    len(eventIDs),
-				"error",    err,
+			// RecoverPendingArchive سيصلح هذا في الـ run القادم
+			j.logger.Error("mark archived failed — recovery will fix on next run",
+				"key",   key,
+				"count", len(eventIDs),
+				"error", err,
 			)
 		}
 
@@ -140,7 +141,6 @@ func (j *Job) runOnce(ctx context.Context) error {
 			"total",      totalMoved,
 		)
 
-		// لو جبنا أقل من الـ batch size يعني خلصنا
 		if len(events) < j.cfg.BatchSize {
 			break
 		}
@@ -150,7 +150,6 @@ func (j *Job) runOnce(ctx context.Context) error {
 	return nil
 }
 
-// toParquetRecords يحوّل []postgres.WarmEvent لـ []coldstore.EventRecord
 func toParquetRecords(events []postgres.WarmEvent) []coldstore.EventRecord {
 	now := time.Now().UnixMilli()
 	records := make([]coldstore.EventRecord, len(events))
@@ -174,3 +173,18 @@ func toParquetRecords(events []postgres.WarmEvent) []coldstore.EventRecord {
 	}
 	return records
 }
+```
+
+---
+
+## ملخص الـ Flow النهائي
+```
+RecoverPendingArchive()     ← يصلح العالقين من runs سابقة
+        ↓
+GetUnarchived()             ← parquet_key IS NULL AND archived_at IS NULL
+        ↓
+WriteParquet() → S3
+        ↓
+RecordParquetKey()          ← نقطة الأمان ✅
+        ↓
+MarkArchived()              ← لو فشل → RecoverPendingArchive يصلحه
