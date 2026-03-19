@@ -1,0 +1,213 @@
+# Policy 1 — منع الـ Pods من الشغل كـ root
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-non-root
+  annotations:
+    policies.kyverno.io/title: Require Non-Root
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >
+      منع أي Pod من الشغل بصلاحيات root
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-runAsNonRoot
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "يجب أن يشتغل الـ Pod بـ runAsNonRoot: true"
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true
+---
+# Policy 2 — منع privilege escalation
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privilege-escalation
+  annotations:
+    policies.kyverno.io/title: Disallow Privilege Escalation
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >
+      منع allowPrivilegeEscalation في كل containers
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-privilege-escalation
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "allowPrivilegeEscalation يجب أن يكون false"
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  allowPrivilegeEscalation: false
+---
+# Policy 3 — إجبار readOnlyRootFilesystem
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-readonly-rootfs
+  annotations:
+    policies.kyverno.io/title: Require ReadOnly Root Filesystem
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-readonly-rootfs
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "readOnlyRootFilesystem يجب أن يكون true"
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  readOnlyRootFilesystem: true
+---
+# Policy 4 — إجبار ARM64 nodeSelector
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-arm64-nodeselector
+  annotations:
+    policies.kyverno.io/title: Require ARM64 NodeSelector
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-arm64-nodeselector
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "يجب تحديد kubernetes.io/arch: arm64"
+        pattern:
+          spec:
+            nodeSelector:
+              kubernetes.io/arch: arm64
+---
+# Policy 5 — منع latest tag
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow Latest Tag
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-image-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "لا يسمح باستخدام :latest — استخدم SHA digest"
+        pattern:
+          spec:
+            containers:
+              - image: "*@sha256:*"
+---
+# Policy 6 — إجبار resource limits
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-limits
+  annotations:
+    policies.kyverno.io/title: Require Resource Limits
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-resource-limits
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "يجب تحديد cpu وmemory limits وrequests"
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+---
+# Policy 7 — منع automountServiceAccountToken
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-automount-sa-token
+  annotations:
+    policies.kyverno.io/title: Disallow Automount SA Token
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-automount-sa-token
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "automountServiceAccountToken يجب أن يكون false"
+        pattern:
+          spec:
+            automountServiceAccountToken: false
+---
+# Policy 8 — منع capabilities
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-drop-all-capabilities
+  annotations:
+    policies.kyverno.io/title: Require Drop All Capabilities
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-drop-capabilities
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "يجب حذف كل الـ capabilities"
+        pattern:
+          spec:
+            containers:
+              - securityContext:
+                  capabilities:
+                    drop:
+                      - ALL
