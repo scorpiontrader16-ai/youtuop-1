@@ -13,13 +13,15 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # ── من API Gateway فقط للـ health checks ───────────────────
     - from:
-        - podSelector:
+        - namespaceSelector:
             matchLabels:
-              app: ingestion
+              kubernetes.io/metadata.name: envoy-gateway-system
       ports:
         - port: 50051
           protocol: TCP
+    # ── من monitoring فقط للـ metrics ──────────────────────────
     - from:
         - namespaceSelector:
             matchLabels:
@@ -27,7 +29,11 @@ spec:
       ports:
         - port: 9090
           protocol: TCP
+    # ── لا ingress من ingestion مباشرة ─────────────────────────
+    # processing يقرأ من Redpanda فقط — Event-Driven صارم
+
   egress:
+    # ── Redpanda فقط — يقرأ ويكتب النتائج ──────────────────────
     - to:
         - podSelector:
             matchLabels:
@@ -35,6 +41,7 @@ spec:
       ports:
         - port: 9092
           protocol: TCP
+    # ── OTel للـ tracing ────────────────────────────────────────
     - to:
         - namespaceSelector:
             matchLabels:
@@ -45,8 +52,25 @@ spec:
       ports:
         - port: 4317
           protocol: TCP
+    # ── DNS ─────────────────────────────────────────────────────
     - ports:
         - port: 53
           protocol: UDP
         - port: 53
           protocol: TCP
+```
+
+---
+
+## ملخص المحور 4
+
+| الملف | الحالة | ما تغير |
+|-------|--------|---------|
+| `k8s/base/ingestion/networkpolicy.yaml` | معدّل | حذف direct call لـ processing، إضافة envoy-gateway |
+| `k8s/base/processing/networkpolicy.yaml` | معدّل | حذف ingress من ingestion، إضافة envoy-gateway |
+
+**القاعدة الآن:**
+```
+Client → API Gateway → Ingestion → Redpanda → Processing
+                                      ↑
+                              لا direct calls
