@@ -98,12 +98,17 @@ resource "aws_s3_bucket_versioning" "questdb_backup" {
   }
 }
 
+# ── Outputs ──────────────────────────────────────────────────────────────
 output "postgres_endpoint" {
   value = aws_db_instance.postgres.endpoint
 }
 
 output "postgres_secret_arn" {
   value = try(aws_db_instance.postgres.master_user_secret[0].secret_arn, "")
+}
+
+output "postgres_arn" {
+  value = aws_db_instance.postgres.arn
 }
 
 output "questdb_backup_bucket" {
