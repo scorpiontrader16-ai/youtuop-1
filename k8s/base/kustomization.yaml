@@ -12,3 +12,5 @@ resources:
   - cert-manager
   - monitoring
   - vault
+  - api-gateway
+  - sync
