@@ -14,3 +14,4 @@ resources:
   - vault
   - api-gateway
   - sync
+  - kyverno
