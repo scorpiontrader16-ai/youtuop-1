@@ -1,11 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 resources:
   - namespaces.yaml
-  - ingestion/service.yaml
-  - ingestion/deployment.yaml
-  - ingestion/scaledobject.yaml
-  - processing/service.yaml
-  - processing/deployment.yaml
-  - processing/scaledobject.yaml
+  - namespace-deny-all.yaml
+  - ingestion
+  - processing
+  - hydration
+  - cilium
+  - chaos
+  - external-secrets
+  - cert-manager
+  - monitoring
+  - vault
