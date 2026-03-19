@@ -57,10 +57,13 @@ module "databases" {
 }
 
 module "redpanda" {
-  source       = "../../modules/redpanda"
-  cluster_name = var.cluster_name
-  environment  = "staging"
-  broker_count = 1
+  source             = "../../modules/redpanda"
+  cluster_name       = var.cluster_name
+  environment        = "staging"
+  broker_count       = 1
+  instance_type      = "im4gn.xlarge"
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
 }
 
 module "vault" {
