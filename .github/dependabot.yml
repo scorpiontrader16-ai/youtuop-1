@@ -1,0 +1,45 @@
+version: 2
+updates:
+  # ── GitHub Actions ────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # ── Go — Ingestion Service ────────────────────────────────────
+  - package-ecosystem: "gomod"
+    directory: "/services/ingestion"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "go"
+
+  # ── Rust — Processing Service ─────────────────────────────────
+  - package-ecosystem: "cargo"
+    directory: "/services/processing"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "rust"
+
+  # ── Terraform ─────────────────────────────────────────────────
+  - package-ecosystem: "terraform"
+    directory: "/infra/terraform/environments/production"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "terraform"
