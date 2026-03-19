@@ -1,7 +1,4 @@
-# k8s/base/cilium/cilium-ingestion.yaml
-# Cilium L7 Network Policy — Ingestion Service
-# يحل محل NetworkPolicy العادي ويضيف L7 HTTP + mTLS enforcement
-apiVersion: "cilium.io/v2"
+apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: ingestion-l7
@@ -10,13 +7,10 @@ spec:
   endpointSelector:
     matchLabels:
       app: ingestion
-
-  # ── Ingress Rules ───────────────────────────────────────────────────────
   ingress:
-    # gRPC من processing service فقط — L7 enforcement
     - fromEndpoints:
         - matchLabels:
-            app: processing
+            app.kubernetes.io/name: ingress-nginx
       toPorts:
         - ports:
             - port: "8080"
@@ -24,9 +18,18 @@ spec:
           rules:
             http:
               - method: "POST"
-                path: "/processing.v1.ProcessingEngineService/.*"
-
-    # HTTP metrics + health — من Prometheus فقط
+                path: "/v1/events"
+              - method: "GET"
+                path: "/healthz"
+              - method: "GET"
+                path: "/readyz"
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: envoy-gateway-system
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
     - fromEndpoints:
         - matchLabels:
             app: prometheus
@@ -38,31 +41,9 @@ spec:
             http:
               - method: "GET"
                 path: "/metrics"
-
-    # Health checks من kube-system (probes)
     - fromEntities:
         - health
-
-    # HTTP events endpoint — من ingress controller فقط
-    - fromEndpoints:
-        - matchLabels:
-            app.kubernetes.io/name: ingress-nginx
-      toPorts:
-        - ports:
-            - port: "9090"
-              protocol: TCP
-          rules:
-            http:
-              - method: "POST"
-                path: "/v1/events"
-              - method: "GET"
-                path: "/healthz"
-              - method: "GET"
-                path: "/readyz"
-
-  # ── Egress Rules ────────────────────────────────────────────────────────
   egress:
-    # Redpanda — Kafka protocol
     - toEndpoints:
         - matchLabels:
             app: redpanda
@@ -70,17 +51,6 @@ spec:
         - ports:
             - port: "9092"
               protocol: TCP
-
-    # Processing gRPC
-    - toEndpoints:
-        - matchLabels:
-            app: processing
-      toPorts:
-        - ports:
-            - port: "50051"
-              protocol: TCP
-
-    # OTel Collector
     - toEndpoints:
         - matchLabels:
             app: otel-collector
@@ -88,8 +58,6 @@ spec:
         - ports:
             - port: "4317"
               protocol: TCP
-
-    # ClickHouse
     - toEndpoints:
         - matchLabels:
             app: clickhouse
@@ -97,8 +65,6 @@ spec:
         - ports:
             - port: "9000"
               protocol: TCP
-
-    # Postgres
     - toEndpoints:
         - matchLabels:
             app: postgres
@@ -106,8 +72,6 @@ spec:
         - ports:
             - port: "5432"
               protocol: TCP
-
-    # MinIO S3
     - toEndpoints:
         - matchLabels:
             app: minio
@@ -115,8 +79,6 @@ spec:
         - ports:
             - port: "9000"
               protocol: TCP
-
-    # DNS — مطلوب دائماً
     - toEndpoints:
         - matchLabels:
             k8s-app: kube-dns
