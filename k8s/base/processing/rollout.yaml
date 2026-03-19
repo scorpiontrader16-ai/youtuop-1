@@ -1,5 +1,3 @@
-# k8s/base/processing/rollout.yaml
-# Argo Rollout — Processing Service / Rust Engine (Canary)
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -13,7 +11,6 @@ spec:
   selector:
     matchLabels:
       app: processing
-
   template:
     metadata:
       labels:
@@ -78,12 +75,10 @@ spec:
             capabilities:
               drop: ["ALL"]
 
-  # ── Canary Strategy ────────────────────────────────────────────────────
   strategy:
     canary:
       canaryService: processing-canary
       stableService: processing-stable
-
       steps:
         - setWeight: 10
         - pause:
@@ -94,12 +89,14 @@ spec:
         - setWeight: 50
         - pause:
             duration: 5m
+        - analysis:
+            templates:
+              - templateName: grpc-error-rate-check
+              - templateName: grpc-latency-check
         - setWeight: 100
-
       autoPromotionEnabled: false
 
 ---
-# AnalysisTemplate — يتحقق من gRPC error rate للـ Rust engine
 apiVersion: argoproj.io/v1alpha1
 kind: AnalysisTemplate
 metadata:
@@ -118,3 +115,24 @@ spec:
             /
             sum(rate(processing_grpc_requests_total[2m]))
       successCondition: result[0] < 0.01
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: grpc-latency-check
+  namespace: platform
+spec:
+  metrics:
+    - name: p99-latency
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus:9090
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(processing_grpc_request_duration_seconds_bucket[2m]))
+              by (le)
+            )
+      successCondition: result[0] < 1.0
