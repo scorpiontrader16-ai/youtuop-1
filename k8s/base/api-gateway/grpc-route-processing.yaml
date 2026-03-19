@@ -1,0 +1,37 @@
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: GRPCRoute
+metadata:
+  name: processing-grpc
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: processing
+    app.kubernetes.io/component: api-gateway
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: platform
+      sectionName: grpc
+
+  hostnames:
+    - "processing.platform.internal"
+
+  rules:
+    # ── كل الـ gRPC methods على الـ processing service ─────────
+    - matches:
+        - method:
+            service: platform.processing.v1.ProcessingService
+      backendRefs:
+        - name: processing-stable
+          port: 50051
+          weight: 90
+        - name: processing-canary
+          port: 50051
+          weight: 10
+
+    # ── Health check ────────────────────────────────────────────
+    - matches:
+        - method:
+            service: grpc.health.v1.Health
+      backendRefs:
+        - name: processing-stable
+          port: 50051
