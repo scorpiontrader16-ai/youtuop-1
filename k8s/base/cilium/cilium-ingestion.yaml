@@ -10,7 +10,7 @@ spec:
   ingress:
     - fromEndpoints:
         - matchLabels:
-            app.kubernetes.io/name: ingress-nginx
+            io.kubernetes.pod.namespace: envoy-gateway-system
       toPorts:
         - ports:
             - port: "8080"
@@ -25,11 +25,19 @@ spec:
                 path: "/readyz"
     - fromEndpoints:
         - matchLabels:
-            io.kubernetes.pod.namespace: envoy-gateway-system
+            app.kubernetes.io/name: ingress-nginx
       toPorts:
         - ports:
             - port: "8080"
               protocol: TCP
+          rules:
+            http:
+              - method: "POST"
+                path: "/v1/events"
+              - method: "GET"
+                path: "/healthz"
+              - method: "GET"
+                path: "/readyz"
     - fromEndpoints:
         - matchLabels:
             app: prometheus
