@@ -1,0 +1,150 @@
+# k8s/base/ingestion/rollout.yaml
+# Argo Rollout — Ingestion Service (Canary Strategy)
+# يحل محل Deployment العادي — احذف deployment.yaml بعد تطبيق ده
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: ingestion
+  namespace: platform
+  labels:
+    app: ingestion
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: ingestion
+
+  template:
+    metadata:
+      labels:
+        app: ingestion
+    spec:
+      serviceAccountName: ingestion
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: ingestion
+          image: ghcr.io/aminpola2001-ctrl/youtuop/ingestion:latest
+          ports:
+            - name: grpc
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: GRPC_PORT
+              value: "8080"
+            - name: HTTP_PORT
+              value: "9090"
+            - name: REDPANDA_BROKERS
+              value: redpanda:9092
+            - name: PROCESSING_ADDR
+              value: processing:50051
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: otel-collector:4317
+          envFrom:
+            - secretRef:
+                name: ingestion-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+  # ── Canary Strategy ────────────────────────────────────────────────────
+  strategy:
+    canary:
+      # canaryService و stableService لازم يتعملوا في service.yaml
+      canaryService: ingestion-canary
+      stableService: ingestion-stable
+      trafficRouting:
+        nginx:
+          stableIngress: ingestion-stable
+
+      # خطوات الـ canary: 10% → تحقق → 50% → تحقق → 100%
+      steps:
+        - setWeight: 10
+        - pause:
+            duration: 2m
+        - analysis:
+            templates:
+              - templateName: error-rate-check
+        - setWeight: 50
+        - pause:
+            duration: 5m
+        - analysis:
+            templates:
+              - templateName: error-rate-check
+              - templateName: latency-check
+        - setWeight: 100
+
+      # لو فشل الـ analysis — rollback تلقائي
+      autoPromotionEnabled: false
+
+---
+# AnalysisTemplate — يتحقق من error rate
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: error-rate-check
+  namespace: platform
+spec:
+  metrics:
+    - name: error-rate
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus:9090
+          query: |
+            sum(rate(ingestion_http_requests_total{status=~"5.*"}[2m]))
+            /
+            sum(rate(ingestion_http_requests_total[2m]))
+      successCondition: result[0] < 0.01
+
+---
+# AnalysisTemplate — يتحقق من latency
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: latency-check
+  namespace: platform
+spec:
+  metrics:
+    - name: p99-latency
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus:9090
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(ingestion_http_request_duration_seconds_bucket[2m]))
+              by (le)
+            )
+      successCondition: result[0] < 0.5
