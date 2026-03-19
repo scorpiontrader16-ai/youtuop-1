@@ -21,7 +21,7 @@ tokio = { version = "1", features = [
 tokio-stream = "0.1"
 futures      = "0.3"
 
-rdkafka = { version = "0.36", features = ["cmake-build", "ssl"] }
+rdkafka = { version = "0.39", features = ["cmake-build", "ssl"] }
 
 tracing               = "0.1"
 tracing-subscriber    = { version = "0.3", features = ["env-filter", "json"] }
