@@ -5,6 +5,8 @@ metadata:
   namespace: platform
   labels:
     app: ingestion
+  annotations:
+    service.kubernetes.io/topology-aware-hints: "auto"
 spec:
   selector:
     app: ingestion
@@ -26,6 +28,8 @@ metadata:
   namespace: platform
   labels:
     app: ingestion
+  annotations:
+    service.kubernetes.io/topology-aware-hints: "auto"
 spec:
   selector:
     app: ingestion
