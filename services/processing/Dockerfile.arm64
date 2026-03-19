@@ -1,12 +1,10 @@
-FROM --platform=$BUILDPLATFORM rust:1.77-slim AS chef
-
+FROM --platform=$BUILDPLATFORM rust:1.85-slim AS chef
 RUN apt-get update && apt-get install -y \
     protobuf-compiler \
     pkg-config \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
-
-RUN cargo install cargo-chef
+RUN cargo install cargo-chef --locked
 WORKDIR /app
 
 FROM chef AS planner
@@ -18,26 +16,18 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 FROM builder-deps AS builder
-
 ARG BUILD_VERSION=dev
-
 COPY . .
-
 RUN cargo build \
     --release \
     --locked \
     && strip target/release/processing
 
 FROM gcr.io/distroless/cc-debian12:nonroot
-
 COPY --from=builder /app/target/release/processing /processing
-
 LABEL org.opencontainers.image.title="processing-service"
 LABEL org.opencontainers.image.description="Rust analytical processing engine"
-
 USER 65532:65532
-
 EXPOSE 50051
 EXPOSE 9090
-
 ENTRYPOINT ["/processing"]
