@@ -1,0 +1,45 @@
+# استثناءات لـ system components تحتاج صلاحيات خاصة
+apiVersion: kyverno.io/v2beta1
+kind: PolicyException
+metadata:
+  name: system-exceptions
+  namespace: kube-system
+spec:
+  exceptions:
+    - policyName: require-non-root
+      ruleNames: [check-runAsNonRoot]
+    - policyName: require-readonly-rootfs
+      ruleNames: [check-readonly-rootfs]
+    - policyName: require-arm64-nodeselector
+      ruleNames: [check-arm64-nodeselector]
+    - policyName: disallow-latest-tag
+      ruleNames: [check-image-tag]
+  match:
+    any:
+      - resources:
+          kinds: [Pod]
+          namespaces:
+            - kube-system
+            - cert-manager
+            - monitoring
+            - argocd
+            - envoy-gateway-system
+---
+# استثناء لـ mirrormaker2 — يحتاج write access
+apiVersion: kyverno.io/v2beta1
+kind: PolicyException
+metadata:
+  name: mirrormaker2-exception
+  namespace: platform
+spec:
+  exceptions:
+    - policyName: require-readonly-rootfs
+      ruleNames: [check-readonly-rootfs]
+  match:
+    any:
+      - resources:
+          kinds: [Pod]
+          namespaces: [platform]
+          selector:
+            matchLabels:
+              app: mirrormaker2
