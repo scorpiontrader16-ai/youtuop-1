@@ -204,6 +204,11 @@ jobs:
         run: |
           terraform init -backend=false
           terraform validate
+      - name: Validate EU West
+        working-directory: infra/terraform/environments/eu-west-1
+        run: |
+          terraform init -backend=false
+          terraform validate
       - name: Validate Staging
         working-directory: infra/terraform/environments/staging
         run: |
@@ -230,13 +235,17 @@ jobs:
           tar -xzf kubeconform-linux-amd64.tar.gz
           chmod +x kubeconform
           sudo mv kubeconform /usr/local/bin/
-      - name: Validate all Kubernetes manifests
+      - name: Validate standard Kubernetes manifests
         run: |
           find k8s -name "*.yaml" ! -name "kustomization.yaml" \
-            ! -path "*/cilium/*" \
             ! -path "*/chaos/*" \
             ! -path "*/external-secrets/*" \
-            -exec kubeconform -summary -strict {} \;
+            -exec kubeconform \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              -summary \
+              -strict \
+              {} \;
       - name: Setup kustomize
         uses: imranismail/setup-kustomize@v2
       - name: Validate kustomize overlays
@@ -311,7 +320,9 @@ jobs:
       - name: Wait for ClickHouse
         run: |
           for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -u platform:platform http://localhost:8123/ping 2>/dev/null || echo "failed")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              -u platform:platform \
+              http://localhost:8123/ping 2>/dev/null || echo "failed")
             if [ "$HTTP_CODE" = "200" ]; then
               echo "ClickHouse ready"
               exit 0
@@ -368,7 +379,8 @@ jobs:
             exit 1
           fi
 
-          curl -sS -u platform:platform "http://localhost:8123/?database=events" -d "SHOW TABLES"
+          curl -sS -u platform:platform \
+            "http://localhost:8123/?database=events" -d "SHOW TABLES"
 
       - name: Run Postgres migrations
         run: |
