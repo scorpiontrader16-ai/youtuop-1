@@ -86,19 +86,6 @@ resource "aws_db_instance" "postgres" {
   tags = { Environment = var.environment }
 }
 
-resource "aws_s3_bucket" "questdb_backup" {
-  bucket = "${var.cluster_name}-questdb-backup"
-  tags   = { Environment = var.environment }
-}
-
-resource "aws_s3_bucket_versioning" "questdb_backup" {
-  bucket = aws_s3_bucket.questdb_backup.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-# ── Outputs ──────────────────────────────────────────────────────────────
 output "postgres_endpoint" {
   value = aws_db_instance.postgres.endpoint
 }
@@ -109,8 +96,4 @@ output "postgres_secret_arn" {
 
 output "postgres_arn" {
   value = aws_db_instance.postgres.arn
-}
-
-output "questdb_backup_bucket" {
-  value = aws_s3_bucket.questdb_backup.bucket
 }
