@@ -5,8 +5,10 @@ metadata:
   namespace: platform
   labels:
     app: processing
+  annotations:
+    service.kubernetes.io/topology-aware-hints: "auto"
 spec:
-  selector:           # ← كان مفقوداً — bug مؤكد
+  selector:
     app: processing
   ports:
     - name: grpc
@@ -26,8 +28,10 @@ metadata:
   namespace: platform
   labels:
     app: processing
+  annotations:
+    service.kubernetes.io/topology-aware-hints: "auto"
 spec:
-  selector:           # ← كان مفقوداً — bug مؤكد
+  selector:
     app: processing
   ports:
     - name: grpc
