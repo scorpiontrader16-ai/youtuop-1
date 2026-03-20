@@ -1,41 +1,33 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: ingestion
+  name: processing
   namespace: platform
   labels:
-    app: ingestion
+    app: processing
 spec:
   podSelector:
     matchLabels:
-      app: ingestion
+      app: processing
   policyTypes:
     - Ingress
     - Egress
   ingress:
-    # ── من API Gateway فقط (gRPC :8090) ────────────────────
+    # ── من API Gateway فقط (gRPC :50051) ───────────────────
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: envoy-gateway-system
       ports:
-        - port: 8090
+        - port: 50051
           protocol: TCP
-    # ── من ingress-nginx للـ canary routing ────────────────
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-      ports:
-        - port: 8090
-          protocol: TCP
-    # ── من monitoring للـ metrics scraping (:9091) ─────────
+    # ── من monitoring للـ metrics scraping (:9093) ─────────
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
       ports:
-        - port: 9091
+        - port: 9093
           protocol: TCP
   egress:
     # ── Redpanda فقط — Event-Driven architecture ───────────
@@ -56,32 +48,6 @@ spec:
               app: otel-collector
       ports:
         - port: 4317
-          protocol: TCP
-    # ── Postgres للـ persistence ───────────────────────────
-    - to:
-        - podSelector:
-            matchLabels:
-              app: postgres
-      ports:
-        - port: 5432
-          protocol: TCP
-    # ── ClickHouse للـ analytics ───────────────────────────
-    - to:
-        - podSelector:
-            matchLabels:
-              app: clickhouse
-      ports:
-        - port: 9000
-          protocol: TCP
-        - port: 8123
-          protocol: TCP
-    # ── MinIO للـ object storage ───────────────────────────
-    - to:
-        - podSelector:
-            matchLabels:
-              app: minio
-      ports:
-        - port: 9000
           protocol: TCP
     # ── DNS ────────────────────────────────────────────────
     - ports:
