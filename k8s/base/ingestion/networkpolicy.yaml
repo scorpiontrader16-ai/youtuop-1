@@ -13,33 +13,32 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # ── من API Gateway فقط ─────────────────────────────────────
+    # ── من API Gateway فقط (gRPC :8090) ────────────────────
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: envoy-gateway-system
       ports:
-        - port: 8080
+        - port: 8090
           protocol: TCP
-    # ── من ingress-nginx (للتوافق مع الـ canary routing) ───────
+    # ── من ingress-nginx للـ canary routing ────────────────
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: ingress-nginx
       ports:
-        - port: 8080
+        - port: 8090
           protocol: TCP
-    # ── من monitoring فقط للـ metrics ──────────────────────────
+    # ── من monitoring للـ metrics scraping (:9091) ─────────
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
       ports:
-        - port: 9090
+        - port: 9091
           protocol: TCP
   egress:
-    # ── Redpanda فقط — لا direct calls لأي service ─────────────
-    # هذا هو جوهر Event-Driven: ingestion ينشر events فقط
+    # ── Redpanda فقط — Event-Driven architecture ───────────
     - to:
         - podSelector:
             matchLabels:
@@ -47,7 +46,7 @@ spec:
       ports:
         - port: 9092
           protocol: TCP
-    # ── OTel للـ tracing ────────────────────────────────────────
+    # ── OTel Collector للـ tracing ─────────────────────────
     - to:
         - namespaceSelector:
             matchLabels:
@@ -58,7 +57,7 @@ spec:
       ports:
         - port: 4317
           protocol: TCP
-    # ── Postgres للـ persistence ────────────────────────────────
+    # ── Postgres للـ persistence ───────────────────────────
     - to:
         - podSelector:
             matchLabels:
@@ -66,7 +65,7 @@ spec:
       ports:
         - port: 5432
           protocol: TCP
-    # ── ClickHouse للـ analytics ────────────────────────────────
+    # ── ClickHouse للـ analytics ───────────────────────────
     - to:
         - podSelector:
             matchLabels:
@@ -76,7 +75,7 @@ spec:
           protocol: TCP
         - port: 8123
           protocol: TCP
-    # ── MinIO للـ object storage ────────────────────────────────
+    # ── MinIO للـ object storage ───────────────────────────
     - to:
         - podSelector:
             matchLabels:
@@ -84,7 +83,7 @@ spec:
       ports:
         - port: 9000
           protocol: TCP
-    # ── DNS ─────────────────────────────────────────────────────
+    # ── DNS ────────────────────────────────────────────────
     - ports:
         - port: 53
           protocol: UDP
