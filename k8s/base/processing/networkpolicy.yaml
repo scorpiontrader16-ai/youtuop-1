@@ -13,6 +13,7 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # ── من API Gateway فقط (gRPC :50051) ───────────────────
     - from:
         - namespaceSelector:
             matchLabels:
@@ -20,14 +21,16 @@ spec:
       ports:
         - port: 50051
           protocol: TCP
+    # ── من monitoring للـ metrics scraping (:9093) ─────────
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
       ports:
-        - port: 9090
+        - port: 9093
           protocol: TCP
   egress:
+    # ── Redpanda فقط — Event-Driven architecture ───────────
     - to:
         - podSelector:
             matchLabels:
@@ -35,6 +38,7 @@ spec:
       ports:
         - port: 9092
           protocol: TCP
+    # ── OTel Collector للـ tracing ─────────────────────────
     - to:
         - namespaceSelector:
             matchLabels:
@@ -45,6 +49,7 @@ spec:
       ports:
         - port: 4317
           protocol: TCP
+    # ── DNS ────────────────────────────────────────────────
     - ports:
         - port: 53
           protocol: UDP
