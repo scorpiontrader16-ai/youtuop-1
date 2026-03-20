@@ -1,4 +1,5 @@
 terraform {
+  backend "s3" {}
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -21,7 +22,7 @@ provider "aws" {
     tags = {
       Environment   = "production"
       Project       = "platform"
-      Region        = "eu-west-1"
+      Region        = var.aws_region
       ManagedBy     = "terraform"
       DataResidency = "eu"
     }
@@ -84,6 +85,7 @@ module "vault" {
   oidc_provider_url = module.cluster.oidc_provider_url
 }
 
+# ── Cross-Region Results Sync — EU Side ──────────────────────────────────
 resource "aws_s3_bucket" "results_sync" {
   bucket = "platform-results-sync-eu-west-1"
   tags = {
@@ -170,6 +172,7 @@ resource "aws_iam_role_policy" "replication" {
   })
 }
 
+# ── Outputs ───────────────────────────────────────────────────────────────
 output "cluster_endpoint" {
   value = module.cluster.cluster_endpoint
 }
