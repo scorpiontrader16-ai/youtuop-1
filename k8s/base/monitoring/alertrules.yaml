@@ -1,0 +1,176 @@
+# ============================================================
+# k8s/base/monitoring/alertrules.yaml
+# Prometheus AlertingRules — youtuop-1 Platform
+# ============================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: youtuop-alerts
+  namespace: monitoring
+  labels:
+    app: youtuop
+    role: alert-rules
+spec:
+  groups:
+
+    # ─── Ingestion Service ────────────────────────────────
+    - name: ingestion
+      interval: 30s
+      rules:
+
+        - alert: IngestionHighErrorRate
+          expr: |
+            sum(rate(ingestion_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(ingestion_http_requests_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            service: ingestion
+          annotations:
+            summary: "Ingestion error rate > 5%"
+            description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+            runbook: "https://github.com/scorpiontrader16-ai/youtuop-1/wiki/runbooks/ingestion-errors"
+
+        - alert: IngestionHighLatency
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(ingestion_http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 1.0
+          for: 5m
+          labels:
+            severity: warning
+            service: ingestion
+          annotations:
+            summary: "Ingestion P99 latency > 1s"
+            description: "P99 latency is {{ $value }}s."
+
+        - alert: IngestionHighDropRate
+          expr: |
+            sum(rate(ingestion_events_dropped_total[5m])) > 10
+          for: 2m
+          labels:
+            severity: warning
+            service: ingestion
+          annotations:
+            summary: "Ingestion dropping events"
+            description: "Dropping {{ $value }} events/s — buffer may be full."
+
+        - alert: IngestionCircuitBreakerOpen
+          expr: |
+            ingestion_circuit_breaker_state > 1
+          for: 1m
+          labels:
+            severity: critical
+            service: ingestion
+          annotations:
+            summary: "Circuit breaker OPEN: {{ $labels.name }}"
+            description: "Circuit breaker {{ $labels.name }} is open — upstream unreachable."
+
+        - alert: IngestionMissingTenantID
+          expr: |
+            sum(rate(ingestion_tenant_missing_total[5m])) > 5
+          for: 5m
+          labels:
+            severity: warning
+            service: ingestion
+          annotations:
+            summary: "High rate of requests missing tenant_id"
+            description: "{{ $value }} requests/s missing X-Tenant-ID header."
+
+        - alert: IngestionDown
+          expr: |
+            up{job="ingestion"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: ingestion
+          annotations:
+            summary: "Ingestion service is DOWN"
+            description: "Ingestion service has been unreachable for 1 minute."
+
+    # ─── Processing Service ───────────────────────────────
+    - name: processing
+      interval: 30s
+      rules:
+
+        - alert: ProcessingDown
+          expr: |
+            up{job="processing"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: processing
+          annotations:
+            summary: "Processing service is DOWN"
+            description: "Processing service has been unreachable for 1 minute."
+
+        - alert: ProcessingKafkaLag
+          expr: |
+            sum(keda_scaler_metrics_value{scaledObject="ingestion"}) > 10000
+          for: 10m
+          labels:
+            severity: warning
+            service: processing
+          annotations:
+            summary: "Kafka consumer lag is high"
+            description: "Consumer lag is {{ $value }} messages."
+
+    # ─── Infrastructure ───────────────────────────────────
+    - name: infrastructure
+      interval: 60s
+      rules:
+
+        - alert: ClickHouseDown
+          expr: |
+            up{job="clickhouse"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: clickhouse
+          annotations:
+            summary: "ClickHouse is DOWN"
+            description: "ClickHouse hot store has been unreachable for 2 minutes."
+
+        - alert: PostgresDown
+          expr: |
+            up{job="postgres"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: postgres
+          annotations:
+            summary: "PostgreSQL is DOWN"
+            description: "PostgreSQL warm store has been unreachable for 2 minutes."
+
+        - alert: RedpandaDown
+          expr: |
+            up{job="redpanda"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: redpanda
+          annotations:
+            summary: "Redpanda is DOWN"
+            description: "Redpanda streaming layer has been unreachable for 2 minutes."
+
+        - alert: HighMemoryUsage
+          expr: |
+            (container_memory_usage_bytes{namespace="platform"}
+            / container_spec_memory_limit_bytes{namespace="platform"}) > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container memory > 85%: {{ $labels.container }}"
+            description: "Container {{ $labels.container }} is using {{ $value | humanizePercentage }} of memory limit."
+
+        - alert: PodCrashLooping
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="platform"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod crash looping: {{ $labels.pod }}"
+            description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in 15 minutes."
