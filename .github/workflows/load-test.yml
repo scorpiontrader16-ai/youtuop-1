@@ -1,3 +1,6 @@
+# ============================================================
+# load-test.yml — k6 Load Testing
+# ============================================================
 name: Load Tests
 
 on:
@@ -7,18 +10,14 @@ on:
         description: 'Test scenario'
         required: true
         type: choice
-        options:
-          - smoke
-          - load
-          - stress
+        options: [smoke, load, stress]
         default: smoke
       base_url:
         description: 'Target URL'
         required: true
-        default: 'http://localhost:9090'
-
+        default: 'http://localhost:9091'
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - 'scripts/load-tests/**'
 
@@ -27,16 +26,18 @@ jobs:
     name: k6 — ${{ github.event.inputs.scenario || 'smoke' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
 
+      - name: Create results directory
+        run: mkdir -p results
+
       - name: Run smoke test (always runs first)
         env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:9090' }}
+          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:9091' }}
         run: |
           k6 run \
             --env SCENARIO=smoke \
@@ -48,10 +49,9 @@ jobs:
       - name: Run selected scenario
         if: github.event.inputs.scenario != 'smoke'
         env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:9090' }}
+          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:9091' }}
           SCENARIO: ${{ github.event.inputs.scenario || 'load' }}
         run: |
-          mkdir -p results
           k6 run \
             --env SCENARIO=$SCENARIO \
             --env BASE_URL=$BASE_URL \
@@ -70,6 +70,9 @@ jobs:
         if: always()
         run: |
           echo "## k6 Load Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "- Scenario: ${{ github.event.inputs.scenario || 'smoke' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Target: ${{ github.event.inputs.base_url || 'localhost' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Scenario : ${{ github.event.inputs.scenario || 'smoke' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Target   : ${{ github.event.inputs.base_url || 'http://localhost:9091' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit   : ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          if [ -f results/smoke.json ]; then
+            echo "- Results  : uploaded as artifact" >> $GITHUB_STEP_SUMMARY
+          fi
