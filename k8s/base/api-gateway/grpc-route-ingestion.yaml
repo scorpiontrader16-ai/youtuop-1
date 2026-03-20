@@ -11,10 +11,8 @@ spec:
     - name: platform-gateway
       namespace: platform
       sectionName: grpc
-
   hostnames:
     - "ingestion.platform.internal"
-
   rules:
     # ── كل الـ gRPC methods على الـ ingestion service ──────────
     - matches:
@@ -22,16 +20,15 @@ spec:
             service: platform.ingestion.v1.IngestionService
       backendRefs:
         - name: ingestion-stable
-          port: 8080
+          port: 8090
           weight: 90
         - name: ingestion-canary
-          port: 8080
+          port: 8090
           weight: 10
-
     # ── Health check ────────────────────────────────────────────
     - matches:
         - method:
             service: grpc.health.v1.Health
       backendRefs:
         - name: ingestion-stable
-          port: 8080
+          port: 8090
