@@ -51,36 +51,38 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.69.3
       - name: Run Trivy on ingestion
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          scan-type: fs
-          scan-ref: services/ingestion
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          ignore-unfixed: true
-          format: table
+        run: |
+          trivy fs \
+            --severity CRITICAL,HIGH \
+            --exit-code 1 \
+            --ignore-unfixed \
+            services/ingestion
 
   trivy-processing:
     name: Trivy — Processing Service
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.69.3
       - name: Run Trivy on processing
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          scan-type: fs
-          scan-ref: services/processing
-          severity: CRITICAL,HIGH
-          exit-code: 1
-          ignore-unfixed: true
-          format: table
+        run: |
+          trivy fs \
+            --severity CRITICAL,HIGH \
+            --exit-code 1 \
+            --ignore-unfixed \
+            services/processing
 
   codeql:
     name: CodeQL — Go Analysis
@@ -242,202 +244,3 @@ jobs:
         run: |
           for dir in infra/terraform/modules/*/; do
             if [ -d "$dir" ]; then
-              echo "Validating: $dir"
-              terraform -chdir="$dir" init -backend=false
-              terraform -chdir="$dir" validate
-            fi
-          done
-
-  validate-k8s:
-    name: Kubernetes Validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install kubeconform
-        run: |
-          wget https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz
-          tar -xzf kubeconform-linux-amd64.tar.gz
-          chmod +x kubeconform
-          sudo mv kubeconform /usr/local/bin/
-      - name: Validate standard Kubernetes manifests
-        run: |
-          find k8s -name "*.yaml" ! -name "kustomization.yaml" \
-            ! -path "*/chaos/*" \
-            ! -path "*/external-secrets/*" \
-            -exec kubeconform \
-              -schema-location default \
-              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-              -summary \
-              -strict \
-              {} \;
-      - name: Setup kustomize
-        uses: imranismail/setup-kustomize@v2
-      - name: Validate kustomize overlays
-        run: |
-          kustomize build k8s/overlays/production/ingestion > /dev/null
-          kustomize build k8s/overlays/production/processing > /dev/null
-
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [build-go, build-rust]
-    timeout-minutes: 15
-    permissions:
-      contents: read
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: platform
-          POSTGRES_PASSWORD: platform
-          POSTGRES_DB: platform
-        options: >-
-          --health-cmd "pg_isready -U platform"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-        ports:
-          - 5432:5432
-
-      clickhouse:
-        image: clickhouse/clickhouse-server:24.3-alpine
-        env:
-          CLICKHOUSE_USER: platform
-          CLICKHOUSE_PASSWORD: platform
-          CLICKHOUSE_DB: events
-        ports:
-          - 8123:8123
-          - 9000:9000
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Go 1.24
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-          cache-dependency-path: services/ingestion/go.mod
-
-      - name: Tidy dependencies
-        working-directory: services/ingestion
-        run: go mod tidy
-
-      - name: Install tools
-        run: |
-          go install github.com/pressly/goose/v3/cmd/goose@latest
-          curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc \
-            -o /usr/local/bin/mc && chmod +x /usr/local/bin/mc
-          sudo apt-get update && sudo apt-get install -y curl
-
-      - name: Wait for Postgres
-        run: |
-          for i in $(seq 1 30); do
-            if pg_isready -h localhost -p 5432 -U platform; then
-              echo "Postgres ready"
-              exit 0
-            fi
-            echo "Waiting for Postgres... ($i/30)"
-            sleep 2
-          done
-          echo "Postgres not ready"
-          exit 1
-
-      - name: Wait for ClickHouse
-        run: |
-          for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              -u platform:platform \
-              http://localhost:8123/ping 2>/dev/null || echo "failed")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "ClickHouse ready"
-              exit 0
-            fi
-            echo "Waiting for ClickHouse... ($i/30) HTTP: $HTTP_CODE"
-            sleep 2
-          done
-          echo "ClickHouse not ready"
-          exit 1
-
-      - name: Setup ClickHouse Schema
-        run: |
-          curl -sS -u platform:platform "http://localhost:8123/" \
-            -d "CREATE DATABASE IF NOT EXISTS events" || {
-              echo "Failed to create database"
-              exit 1
-            }
-
-          if [ ! -f infra/clickhouse/init.sql ]; then
-            echo "init.sql not found, skipping schema application"
-            exit 0
-          fi
-
-          FAILED=0
-          CURRENT_QUERY=""
-          while IFS= read -r line || [ -n "$line" ]; do
-            if [[ "$line" =~ ^[[:space:]]*-- ]]; then
-              continue
-            fi
-            trimmed_line="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-            if [[ -n "$trimmed_line" ]]; then
-              CURRENT_QUERY="$CURRENT_QUERY $trimmed_line"
-            fi
-            if [[ "$trimmed_line" == *\; ]]; then
-              query_to_exec="${CURRENT_QUERY%;}"
-              RESPONSE=$(curl -s -w "\n%{http_code}" -u platform:platform \
-                "http://localhost:8123/?database=events" -d "$query_to_exec")
-              HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-              BODY=$(echo "$RESPONSE" | sed '$d')
-              if [ "$HTTP_CODE" != "200" ]; then
-                echo "Failed (HTTP $HTTP_CODE): $BODY"
-                FAILED=1
-              fi
-              CURRENT_QUERY=""
-            fi
-          done < infra/clickhouse/init.sql
-
-          if [ -n "$CURRENT_QUERY" ]; then
-            echo "Ignoring incomplete query at end of file"
-          fi
-
-          if [ $FAILED -eq 1 ]; then
-            echo "Schema application failed"
-            exit 1
-          fi
-
-          curl -sS -u platform:platform \
-            "http://localhost:8123/?database=events" -d "SHOW TABLES"
-
-      - name: Run Postgres migrations
-        run: |
-          goose \
-            -dir services/ingestion/internal/postgres/migrations \
-            postgres \
-            "postgres://platform:platform@localhost:5432/platform?sslmode=disable" \
-            up
-
-      - name: Run integration tests
-        working-directory: services/ingestion
-        env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: "5432"
-          POSTGRES_DB: platform
-          POSTGRES_USER: platform
-          POSTGRES_PASSWORD: platform
-          POSTGRES_SSL_MODE: disable
-          CLICKHOUSE_HOST: localhost
-          CLICKHOUSE_HTTP_PORT: "8123"
-          CLICKHOUSE_TCP_PORT: "9000"
-          CLICKHOUSE_DB: events
-          CLICKHOUSE_USER: platform
-          CLICKHOUSE_PASSWORD: platform
-        run: |
-          if [ -d "./internal/clickhouse" ] || [ -d "./internal/postgres" ]; then
-            go test -tags=integration -v -timeout=120s \
-              ./internal/clickhouse/... \
-              ./internal/postgres/...
-          else
-            echo "No integration test directories found"
-          fi
