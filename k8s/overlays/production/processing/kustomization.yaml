@@ -1,8 +1,19 @@
+# ============================================================
+# overlays/production/processing/kustomization.yaml
+# الـ image tag بيتحدث تلقائياً من release.yml workflow
+# ============================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: platform
 resources:
   - ../../../base/processing
+
+# الـ image tag بيتحدث تلقائياً من release.yml
+# لا تعدّل :latest يدوياً — استخدم semantic version أو SHA digest
+images:
+  - name: ghcr.io/scorpiontrader16-ai/youtuop-1/processing
+    newTag: "1.0.0"
+
 patches:
   - target:
       kind: Rollout
@@ -17,9 +28,6 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/limits/memory
         value: "4Gi"
-      - op: replace
-        path: /spec/template/spec/containers/0/image
-        value: "ghcr.io/scorpiontrader16-ai/youtuop-1/processing:latest"
       - op: add
         path: /spec/template/spec/nodeSelector
         value:
