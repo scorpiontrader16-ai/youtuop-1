@@ -244,3 +244,8 @@ jobs:
         run: |
           for dir in infra/terraform/modules/*/; do
             if [ -d "$dir" ]; then
+              echo "Validating $dir"
+              terraform -chdir="$dir" init -backend=false
+              terraform -chdir="$dir" validate
+            fi
+          done
