@@ -10,7 +10,6 @@ spec:
     - name: platform-gateway
       namespace: platform
       sectionName: https
-
   rules:
     # ── HTTP → HTTPS redirect ───────────────────────────────────
     - matches:
@@ -22,21 +21,19 @@ spec:
           requestRedirect:
             scheme: https
             statusCode: 301
-
-    # ── Ingestion health ────────────────────────────────────────
+    # ── Ingestion health (:9091 HTTP port) ─────────────────────
     - matches:
         - path:
             type: Exact
             value: /healthz/ingestion
       backendRefs:
         - name: ingestion-stable
-          port: 8080
-
-    # ── Processing health ───────────────────────────────────────
+          port: 9091
+    # ── Processing health (:9093 metrics/health port) ───────────
     - matches:
         - path:
             type: Exact
             value: /healthz/processing
       backendRefs:
         - name: processing-stable
-          port: 50051
+          port: 9093
