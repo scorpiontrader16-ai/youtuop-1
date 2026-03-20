@@ -1,6 +1,4 @@
-# k8s/base/ingestion/scaledobject.yaml
 # KEDA ScaledObject — Ingestion Service
-# مع warm-up logic
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -13,29 +11,24 @@ spec:
     apiVersion: argoproj.io/v1alpha1
     kind: Rollout
     name: ingestion
-
-  # minReplicaCount=2: الـ ingestion أهم — نحتاج HA حتى في idle
   minReplicaCount: 2
   maxReplicaCount: 20
   cooldownPeriod: 300
-
   triggers:
-    # HTTP request rate من Prometheus
+    # HTTP request rate من VictoriaMetrics
     - type: prometheus
       metadata:
-        serverAddress: http://prometheus:9090
+        serverAddress: http://victoria-metrics.monitoring.svc.cluster.local:8428
         metricName: ingestion_http_requests_per_second
         query: |
           sum(rate(ingestion_http_requests_total[1m]))
         threshold: "100"
         activationThreshold: "10"
-
     # CPU backup trigger
     - type: cpu
       metricType: Utilization
       metadata:
         value: "70"
-
   advanced:
     horizontalPodAutoscalerConfig:
       behavior:
