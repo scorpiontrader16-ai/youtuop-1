@@ -104,7 +104,7 @@ spec:
             nodeSelector:
               kubernetes.io/arch: arm64
 ---
-# Policy 5 — منع latest tag
+# Policy 5 — منع :latest tag — يسمح بـ SHA digest أو semantic version (v1.2.3)
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
@@ -112,6 +112,8 @@ metadata:
   annotations:
     policies.kyverno.io/title: Disallow Latest Tag
     policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >
+      يمنع استخدام :latest — يُسمح فقط بـ SHA digest أو semantic version مثل v1.2.3
 spec:
   validationFailureAction: Enforce
   background: true
@@ -123,11 +125,13 @@ spec:
               kinds: [Pod]
               namespaces: [platform]
       validate:
-        message: "لا يسمح باستخدام :latest — استخدم SHA digest"
-        pattern:
-          spec:
-            containers:
-              - image: "*@sha256:*"
+        message: "لا يسمح باستخدام :latest — استخدم SHA digest (@sha256:...) أو semantic version (v1.2.3)"
+        deny:
+          conditions:
+            any:
+              - key: "{{ images.containers.*.tag }}"
+                operator: AnyIn
+                value: ["latest", ""]
 ---
 # Policy 6 — إجبار resource limits
 apiVersion: kyverno.io/v1
