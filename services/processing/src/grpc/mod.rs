@@ -59,7 +59,7 @@ impl Engine {
         ProcessingEngineServiceServer::new(self)
     }
 
-    fn check_rate_limit(&self, method: &str) -> Result<(), Status> {
+    fn check_rate_limit(&self, method: &str) -> Result<(), Box<Status>> {
         match self.rate_limiter.check() {
             Ok(_)  => Ok(()),
             Err(_) => {
@@ -68,7 +68,7 @@ impl Engine {
                     "method" => method.to_string(),
                     "status" => "rate_limited"
                 ).increment(1);
-                Err(Status::resource_exhausted("rate limit exceeded, try again later"))
+                Err(Box::new(Status::resource_exhausted("rate limit exceeded, try again later")))
             }
         }
     }
@@ -92,7 +92,7 @@ impl ProcessingEngineService for Engine {
         &self,
         request: Request<ProcessEventRequest>,
     ) -> Result<Response<ProcessEventResponse>, Status> {
-        self.check_rate_limit("process_event")?;
+        self.check_rate_limit("process_event").map_err(|e| *e)?;
 
         let start = Instant::now();
         let req   = request.into_inner();
@@ -146,7 +146,7 @@ impl ProcessingEngineService for Engine {
         &self,
         request: Request<Streaming<ProcessEventRequest>>,
     ) -> Result<Response<Self::ProcessStreamStream>, Status> {
-        self.check_rate_limit("process_stream")?;
+        self.check_rate_limit("process_stream").map_err(|e| *e)?;
 
         let mut inbound = request.into_inner();
         let (tx, rx)    = mpsc::channel::<Result<ProcessEventResponse, Status>>(32);
@@ -184,7 +184,7 @@ impl ProcessingEngineService for Engine {
         &self,
         request: Request<CorrelationRequest>,
     ) -> Result<Response<CorrelationResponse>, Status> {
-        self.check_rate_limit("compute_correlation")?;
+        self.check_rate_limit("compute_correlation").map_err(|e| *e)?;
 
         let req = request.into_inner();
 
@@ -219,7 +219,7 @@ impl ProcessingEngineService for Engine {
         &self,
         request: Request<SignalRequest>,
     ) -> Result<Response<SignalResponse>, Status> {
-        self.check_rate_limit("extract_signals")?;
+        self.check_rate_limit("extract_signals").map_err(|e| *e)?;
 
         let req = request.into_inner();
 
@@ -301,18 +301,19 @@ fn analyze_event(event: &BaseEvent) -> (Signal, HashMap<String, f64>) {
     // نستخدم event_type لتحديد الاتجاه
     let event_type = event.event_type.to_lowercase();
 
+    let event_type_str = &event.event_type;
     let (direction, strength, reason) = if event_type.contains("buy")
         || event_type.contains("bullish")
         || event_type.contains("up")
     {
-        (Direction::Bullish, 0.7, format!("event_type indicates bullish: {}", event.event_type))
+        (Direction::Bullish, 0.7, format!("event_type indicates bullish: {event_type_str}"))
     } else if event_type.contains("sell")
         || event_type.contains("bearish")
         || event_type.contains("down")
     {
-        (Direction::Bearish, 0.7, format!("event_type indicates bearish: {}", event.event_type))
+        (Direction::Bearish, 0.7, format!("event_type indicates bearish: {event_type_str}"))
     } else {
-        (Direction::Neutral, 0.1, format!("neutral event_type: {}", event.event_type))
+        (Direction::Neutral, 0.1, format!("neutral event_type: {event_type_str}"))
     };
 
     // أضف metadata values كـ indicators لو موجودة
