@@ -1,0 +1,154 @@
+# ============================================================
+# k8s/base/monitoring/slo.yaml
+# SLO Definitions — youtuop-1 Platform
+# مطلوب قبل M8 (Auth service) و M11 (API Management)
+# ============================================================
+
+# ─── SLO 1: Ingestion Service Availability ────────────────
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: youtuop-slos
+  namespace: monitoring
+  labels:
+    app: youtuop
+    role: slo-rules
+spec:
+  groups:
+
+    # ── Ingestion Availability SLO ─────────────────────────
+    # Target: 99.9% availability (43.8 min downtime/month)
+    - name: slo.ingestion.availability
+      interval: 30s
+      rules:
+
+        # حساب الـ error rate
+        - record: slo:ingestion:error_rate5m
+          expr: |
+            sum(rate(ingestion_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(ingestion_http_requests_total[5m]))
+
+        # حساب الـ success rate (availability)
+        - record: slo:ingestion:availability1h
+          expr: |
+            1 - (
+              sum(increase(ingestion_http_requests_total{status=~"5.."}[1h]))
+              /
+              sum(increase(ingestion_http_requests_total[1h]))
+            )
+
+        - record: slo:ingestion:availability24h
+          expr: |
+            1 - (
+              sum(increase(ingestion_http_requests_total{status=~"5.."}[24h]))
+              /
+              sum(increase(ingestion_http_requests_total[24h]))
+            )
+
+        - record: slo:ingestion:availability30d
+          expr: |
+            1 - (
+              sum(increase(ingestion_http_requests_total{status=~"5.."}[30d]))
+              /
+              sum(increase(ingestion_http_requests_total[30d]))
+            )
+
+        # Alert: SLO breach burn rate (fast burn — 1h window)
+        - alert: IngestionSLOFastBurn
+          expr: |
+            slo:ingestion:error_rate5m > (14.4 * 0.001)
+          for: 5m
+          labels:
+            severity: critical
+            slo: ingestion-availability
+          annotations:
+            summary: "Ingestion SLO fast burn — availability at risk"
+            description: >
+              Error rate {{ $value | humanizePercentage }} is 14.4x the SLO budget.
+              At this rate, the monthly error budget will be exhausted in ~1 hour.
+
+        # Alert: SLO breach burn rate (slow burn — 6h window)
+        - alert: IngestionSLOSlowBurn
+          expr: |
+            (
+              sum(rate(ingestion_http_requests_total{status=~"5.."}[6h]))
+              /
+              sum(rate(ingestion_http_requests_total[6h]))
+            ) > (6 * 0.001)
+          for: 30m
+          labels:
+            severity: warning
+            slo: ingestion-availability
+          annotations:
+            summary: "Ingestion SLO slow burn — budget being consumed"
+            description: >
+              Error rate over 6h is 6x the SLO budget.
+              Monthly error budget will be exhausted in ~5 days.
+
+    # ── Ingestion Latency SLO ──────────────────────────────
+    # Target: 95% of requests < 200ms, 99% < 1s
+    - name: slo.ingestion.latency
+      interval: 30s
+      rules:
+
+        - record: slo:ingestion:latency_p95_5m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(ingestion_http_request_duration_seconds_bucket[5m])) by (le)
+            )
+
+        - record: slo:ingestion:latency_p99_5m
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(ingestion_http_request_duration_seconds_bucket[5m])) by (le)
+            )
+
+        - alert: IngestionLatencySLOBreach
+          expr: |
+            slo:ingestion:latency_p99_5m > 1.0
+          for: 10m
+          labels:
+            severity: warning
+            slo: ingestion-latency
+          annotations:
+            summary: "Ingestion P99 latency SLO breach"
+            description: "P99 latency is {{ $value }}s — SLO target is < 1s."
+
+    # ── Processing Service Availability SLO ───────────────
+    # Target: 99.5% availability (3.6 hours downtime/month)
+    - name: slo.processing.availability
+      interval: 30s
+      rules:
+
+        - record: slo:processing:availability1h
+          expr: |
+            avg_over_time(up{job="processing"}[1h])
+
+        - alert: ProcessingSLOBreach
+          expr: |
+            avg_over_time(up{job="processing"}[1h]) < 0.995
+          for: 15m
+          labels:
+            severity: critical
+            slo: processing-availability
+          annotations:
+            summary: "Processing SLO breach — availability < 99.5%"
+            description: "Processing availability over 1h is {{ $value | humanizePercentage }}."
+
+    # ── SLO Dashboard Records ──────────────────────────────
+    - name: slo.dashboard
+      interval: 60s
+      rules:
+
+        # Error budget remaining (%)
+        - record: slo:ingestion:error_budget_remaining
+          expr: |
+            1 - (
+              (1 - slo:ingestion:availability30d) / 0.001
+            )
+
+        # Ingestion throughput
+        - record: slo:ingestion:throughput1m
+          expr: |
+            sum(rate(ingestion_events_processed_total[1m]))
