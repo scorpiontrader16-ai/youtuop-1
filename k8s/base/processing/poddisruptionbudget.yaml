@@ -6,6 +6,8 @@ metadata:
   labels:
     app: processing
 spec:
+  # minAvailable=1 مع replicas=2 يضمن إن الـ processing ما توقفش خالص
+  # أثناء node maintenance أو rolling update
   minAvailable: 1
   selector:
     matchLabels:
