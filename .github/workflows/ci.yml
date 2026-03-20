@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy on ingestion
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           scan-type: fs
           scan-ref: services/ingestion
@@ -73,7 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy on processing
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           scan-type: fs
           scan-ref: services/processing
@@ -349,7 +349,7 @@ jobs:
         run: |
           for i in $(seq 1 30); do
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              -u platform:${{ secrets.CLICKHOUSE_PASSWORD }} \
+              -u platform:platform \
               http://localhost:8123/ping 2>/dev/null || echo "failed")
             if [ "$HTTP_CODE" = "200" ]; then
               echo "ClickHouse ready"
@@ -363,8 +363,7 @@ jobs:
 
       - name: Setup ClickHouse Schema
         run: |
-          curl -sS -u platform:${{ secrets.CLICKHOUSE_PASSWORD }} \
-            "http://localhost:8123/" \
+          curl -sS -u platform:platform "http://localhost:8123/" \
             -d "CREATE DATABASE IF NOT EXISTS events" || {
               echo "Failed to create database"
               exit 1
@@ -387,8 +386,7 @@ jobs:
             fi
             if [[ "$trimmed_line" == *\; ]]; then
               query_to_exec="${CURRENT_QUERY%;}"
-              RESPONSE=$(curl -s -w "\n%{http_code}" \
-                -u platform:${{ secrets.CLICKHOUSE_PASSWORD }} \
+              RESPONSE=$(curl -s -w "\n%{http_code}" -u platform:platform \
                 "http://localhost:8123/?database=events" -d "$query_to_exec")
               HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
               BODY=$(echo "$RESPONSE" | sed '$d')
@@ -409,7 +407,7 @@ jobs:
             exit 1
           fi
 
-          curl -sS -u platform:${{ secrets.CLICKHOUSE_PASSWORD }} \
+          curl -sS -u platform:platform \
             "http://localhost:8123/?database=events" -d "SHOW TABLES"
 
       - name: Run Postgres migrations
