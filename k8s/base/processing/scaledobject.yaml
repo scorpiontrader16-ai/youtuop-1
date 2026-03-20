@@ -1,6 +1,5 @@
-# k8s/base/processing/scaledobject.yaml
 # KEDA ScaledObject — Processing Service
-# مع warm-up logic: minReplicaCount=1 يضمن إن في replica جاهزة دايماً
+# يتسكل بناءً على Kafka consumer lag في Redpanda
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -9,50 +8,29 @@ metadata:
   annotations:
     scaledobject.keda.sh/transfer-hpa-ownership: "true"
 spec:
-  # ScaleTargetRef يشاور على الـ Rollout مش Deployment
   scaleTargetRef:
     apiVersion: argoproj.io/v1alpha1
     kind: Rollout
     name: processing
-
-  # ── Warm-up Config ──────────────────────────────────────────────────────
-  # minReplicaCount=1: دايماً في replica واحدة جاهزة — zero cold start
-  minReplicaCount: 1
+  # minReplicaCount=2 للـ HA — processing لازم يكون شغال دايماً
+  minReplicaCount: 2
   maxReplicaCount: 10
-
-  # انتظر 5 دقائق قبل ما تعمل scale down — تجنب cold start بعد burst
   cooldownPeriod: 300
-
-  # ── Scaling Triggers ────────────────────────────────────────────────────
   triggers:
-    # Trigger 1: Redpanda consumer lag — الـ metric الأساسي
+    # Kafka consumer lag — المقياس الرئيسي
     - type: kafka
       metadata:
-        bootstrapServers: redpanda:9092
+        bootstrapServers: redpanda.platform.svc.cluster.local:9092
         consumerGroup: processing-consumer
         topic: market-events
-        lagThreshold: "100"
-        activationLagThreshold: "10"
-
-    # Trigger 2: CPU — backup trigger
+        lagThreshold: "1000"
+        offsetResetPolicy: latest
+    # CPU backup trigger
     - type: cpu
       metricType: Utilization
       metadata:
-        value: "70"
-
-    # Trigger 3: gRPC request rate من Prometheus
-    - type: prometheus
-      metadata:
-        serverAddress: http://prometheus:9090
-        metricName: processing_grpc_requests_per_second
-        query: |
-          sum(rate(processing_grpc_requests_total[1m]))
-        threshold: "50"
-        activationThreshold: "5"
-
-  # ── Advanced Scaling Behavior ────────────────────────────────────────────
+        value: "75"
   advanced:
-    # Scale up بسرعة: زيد بـ 100% كل 30 ثانية
     horizontalPodAutoscalerConfig:
       behavior:
         scaleUp:
@@ -60,7 +38,7 @@ spec:
           policies:
             - type: Percent
               value: 100
-              periodSeconds: 30
+              periodSeconds: 15
         scaleDown:
           stabilizationWindowSeconds: 300
           policies:
