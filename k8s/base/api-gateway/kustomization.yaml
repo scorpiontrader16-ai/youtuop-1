@@ -6,3 +6,4 @@ resources:
   - grpc-route-ingestion.yaml
   - grpc-route-processing.yaml
   - http-route-health.yaml
+  - http-route-auth.yaml
