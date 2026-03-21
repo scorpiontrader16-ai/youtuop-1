@@ -37,3 +37,11 @@ spec:
       backendRefs:
         - name: processing-stable
           port: 9093
+    # ── Auth health (:9092 HTTP port) ───────────────────────────
+    - matches:
+        - path:
+            type: Exact
+            value: /healthz/auth
+      backendRefs:
+        - name: auth-stable
+          port: 9092
