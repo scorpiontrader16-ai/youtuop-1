@@ -103,6 +103,25 @@ jobs:
             --ignore-unfixed \
             services/auth
 
+  trivy-billing:
+    name: Trivy — Billing Service
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin v0.69.3
+      - name: Run Trivy on billing
+        run: |
+          trivy fs \
+            --severity CRITICAL,HIGH \
+            --exit-code 1 \
+            --ignore-unfixed \
+            services/billing
+
   codeql:
     name: CodeQL — Go Analysis
     runs-on: ubuntu-latest
@@ -215,6 +234,35 @@ jobs:
         run: go vet ./...
       - name: Test
         working-directory: services/auth
+        run: go test ./... -timeout 60s
+
+  build-billing:
+    name: Go — Billing Service
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go 1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: services/billing/go.mod
+      - name: Tidy dependencies
+        working-directory: services/billing
+        run: go mod tidy
+      - name: Build
+        working-directory: services/billing
+        run: |
+          CGO_ENABLED=0 go build \
+            -ldflags="-s -w -X main.version=ci" \
+            -trimpath \
+            ./cmd/server
+      - name: Vet
+        working-directory: services/billing
+        run: go vet ./...
+      - name: Test
+        working-directory: services/billing
         run: go test ./... -timeout 60s
 
   build-rust:
