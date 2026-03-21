@@ -1,0 +1,23 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: billing
+  namespace: platform
+  labels:
+    app: billing
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: billing
+  minReplicaCount: 3
+  maxReplicaCount: 10
+  cooldownPeriod: 300
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://victoria-metrics.monitoring.svc.cluster.local:8428
+        metricName: billing_http_requests_rate
+        query: |
+          sum(rate(billing_http_request_duration_seconds_count[2m]))
+        threshold: "100"
