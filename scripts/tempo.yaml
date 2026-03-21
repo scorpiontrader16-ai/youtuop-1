@@ -1,29 +1,36 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Tempo — Local Development Config
-# Receives traces from OTel Collector via OTLP gRPC and stores on disk.
+#
+# Architecture:
+#   Services → OTel Collector (:4317) → Tempo (:4317 internal)
+#
+# الـ Tempo بيستقبل من OTel Collector فقط — مش مباشرة من الـ services
+# عشان مفيش تعارض في البورتات مع الـ OTel Collector
 # ─────────────────────────────────────────────────────────────────────────────
-
 stream_over_http_enabled: true
 
 server:
   http_listen_port: 3200
+  grpc_listen_port: 9095
   log_level: warn
 
 distributor:
   receivers:
     otlp:
       protocols:
+        # Tempo يستقبل على ports داخلية مختلفة عن OTel Collector
+        # OTel Collector بيستخدم 4317/4318 — Tempo على 4320/4321
         grpc:
-          endpoint: 0.0.0.0:4317
+          endpoint: 0.0.0.0:4320
         http:
-          endpoint: 0.0.0.0:4318
+          endpoint: 0.0.0.0:4321
 
 ingester:
-  max_block_duration: 5m   # flush to storage every 5 minutes locally
+  max_block_duration: 5m
 
 compactor:
   compaction:
-    block_retention: 24h   # keep traces for 24h locally
+    block_retention: 24h
 
 metrics_generator:
   registry:
