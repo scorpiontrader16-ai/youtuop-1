@@ -23,6 +23,46 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+
+      # ── Topology Spread — توزيع الـ pods على الـ AZs ─────────
+      # يمنع إن الـ pods كلها تيجي في AZ واحدة
+      # لو AZ وقعت — الـ service لسه شغالة من الـ AZs التانية
+      topologySpreadConstraints:
+        # AZ-level spread — موزّع على الـ availability zones
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: ingestion
+        # Node-level spread — موزّع على nodes مختلفة
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: ingestion
+
+      # ── Affinity — يفضّل نفس الـ AZ زي Redpanda عشان يقلل cross-AZ traffic
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: topology.kubernetes.io/zone
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values: [redpanda]
+        # لا تحط 2 ingestion pods على نفس الـ node
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: ingestion
+
       containers:
         - name: ingestion
           # الـ image tag بيتحدث تلقائياً من release.yml workflow
