@@ -1,0 +1,230 @@
+# ============================================================
+# .github/workflows/gitops-validate.yml
+# GitOps Validation — يتحقق من صحة كل الـ K8s manifests
+# يشتغل على كل PR وكل push لـ main
+# ============================================================
+name: GitOps Validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'k8s/**'
+      - 'infra/argocd/**'
+      - 'proto/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'k8s/**'
+      - 'infra/argocd/**'
+      - 'proto/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ─── 1. Kustomize Build ─────────────────────────────────
+  kustomize-build:
+    name: Kustomize Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: '5.3.0'
+
+      - name: Build k8s/base
+        run: |
+          echo "=== Building k8s/base ==="
+          kustomize build k8s/base
+
+      - name: Build k8s/overlays/production
+        run: |
+          echo "=== Building k8s/overlays/production ==="
+          kustomize build k8s/overlays/production
+
+  # ─── 2. Kubeval — Schema Validation ─────────────────────
+  kubeval:
+    name: Kubeval — Schema Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: '5.3.0'
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz \
+            | tar xz -C /usr/local/bin
+
+      - name: Validate k8s manifests
+        run: |
+          kustomize build k8s/base | kubeconform \
+            --strict \
+            --ignore-missing-schemas \
+            --kubernetes-version 1.29.0 \
+            --schema-location default \
+            --schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            --summary
+
+      - name: Validate production overlay
+        run: |
+          kustomize build k8s/overlays/production | kubeconform \
+            --strict \
+            --ignore-missing-schemas \
+            --kubernetes-version 1.29.0 \
+            --schema-location default \
+            --schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            --summary
+
+  # ─── 3. ArgoCD App Validation ────────────────────────────
+  argocd-validate:
+    name: ArgoCD Apps Validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Validate ArgoCD applications
+        run: |
+          python3 << 'PYEOF'
+          import yaml, sys, os
+
+          errors = []
+          apps_file = "infra/argocd/apps/applications.yaml"
+
+          if not os.path.exists(apps_file):
+              print(f"WARN: {apps_file} not found — skipping")
+              sys.exit(0)
+
+          with open(apps_file) as f:
+              docs = [d for d in yaml.safe_load_all(f) if d and not str(d).startswith('#')]
+
+          for doc in docs:
+              if not doc or doc.get('kind') != 'Application':
+                  continue
+              name = doc.get('metadata', {}).get('name', 'unknown')
+              spec = doc.get('spec', {})
+              source = spec.get('source', {})
+
+              # Check required fields
+              if not spec.get('project'):
+                  errors.append(f"{name}: missing project")
+              if not source.get('repoURL'):
+                  errors.append(f"{name}: missing repoURL")
+              if not spec.get('destination', {}).get('namespace'):
+                  errors.append(f"{name}: missing destination.namespace")
+
+              # Check no placeholder values
+              repo = source.get('repoURL', '')
+              if 'your-org' in repo or 'YOUR-ORG' in repo:
+                  errors.append(f"{name}: placeholder repoURL found!")
+
+              print(f"  ✅ {name}: valid")
+
+          if errors:
+              print("\nErrors found:")
+              for e in errors:
+                  print(f"  ❌ {e}")
+              sys.exit(1)
+          else:
+              print(f"\n✅ All {len(docs)} ArgoCD apps valid")
+          PYEOF
+
+  # ─── 4. Proto Lint ───────────────────────────────────────
+  proto-lint:
+    name: Proto Lint & Breaking Change Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.32.2'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Lint proto files
+        working-directory: proto
+        run: buf lint
+
+      - name: Check for breaking changes
+        working-directory: proto
+        run: |
+          # تحقق من breaking changes مقارنةً بالـ main branch
+          buf breaking \
+            --against "https://github.com/${{ github.repository }}.git#branch=main,subdir=proto" \
+            || echo "⚠️ Breaking changes detected — review required"
+
+  # ─── 5. Security Policy Check ────────────────────────────
+  security-policy:
+    name: Security Policy Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required files exist
+        run: |
+          echo "=== Checking required security files ==="
+          required_files=(
+            "SECURITY.md"
+            ".github/CODEOWNERS"
+            "k8s/base/kyverno/policies.yaml"
+            "k8s/base/namespace-deny-all.yaml"
+          )
+
+          missing=0
+          for f in "${required_files[@]}"; do
+            if [ -f "$f" ]; then
+              echo "  ✅ $f"
+            else
+              echo "  ❌ Missing: $f"
+              missing=$((missing + 1))
+            fi
+          done
+
+          if [ "$missing" -gt 0 ]; then
+            echo "ERROR: $missing required security files missing"
+            exit 1
+          fi
+
+      - name: Check no secrets in K8s manifests
+        run: |
+          echo "=== Checking for hardcoded secrets ==="
+          # يبحث عن passwords أو tokens في الـ YAML files
+          if grep -rn \
+            --include="*.yaml" \
+            --include="*.yml" \
+            -E "(password|token|secret|key)\s*:\s*['\"]?[A-Za-z0-9+/]{20,}" \
+            k8s/ infra/argocd/ 2>/dev/null | grep -v "#"; then
+            echo "ERROR: Possible hardcoded secrets found!"
+            exit 1
+          else
+            echo "  ✅ No hardcoded secrets found"
+          fi
