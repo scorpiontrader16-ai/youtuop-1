@@ -1,8 +1,3 @@
-# ============================================================
-# .github/workflows/load-test.yml — Fixed
-# FIX 1: BASE_URL → INGESTION_URL + PROCESSING_URL
-# FIX 2: على push بدون cluster → continue-on-error: true
-# ============================================================
 name: Load Tests
 
 on:
@@ -42,11 +37,8 @@ jobs:
         run: mkdir -p results
 
       - name: Run smoke test (always runs first)
-        # FIX: على push بدون cluster حقيقي → continue-on-error: true
-        # على workflow_dispatch مع URL حقيقي → continue-on-error: false
-        continue-on-error: ${{ github.event_name == 'push' }}
+        continue-on-error: true
         env:
-          # FIX: INGESTION_URL بدل BASE_URL عشان يتطابق مع ingestion.js
           INGESTION_URL:  ${{ github.event.inputs.ingestion_url  || 'http://localhost:9091' }}
           PROCESSING_URL: ${{ github.event.inputs.processing_url || 'http://localhost:9093' }}
         run: |
@@ -87,6 +79,3 @@ jobs:
           echo "- Ingestion   : ${{ github.event.inputs.ingestion_url  || 'http://localhost:9091' }}" >> $GITHUB_STEP_SUMMARY
           echo "- Processing  : ${{ github.event.inputs.processing_url || 'http://localhost:9093' }}" >> $GITHUB_STEP_SUMMARY
           echo "- Commit      : ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          if [ -f results/smoke.json ]; then
-            echo "- Results     : uploaded as artifact" >> $GITHUB_STEP_SUMMARY
-          fi
