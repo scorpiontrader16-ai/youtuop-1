@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: billing
+  namespace: platform
+  labels:
+    app: billing
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: billing
