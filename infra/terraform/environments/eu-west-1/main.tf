@@ -1,5 +1,11 @@
+# ============================================================
+# infra/terraform/environments/eu-west-1/main.tf
+# FIX: إزالة backend "s3" {} — موجود بالفعل في backend.tf
+# Terraform لا يسمح بـ backend configuration في أكثر من ملف
+# ============================================================
 terraform {
-  backend "s3" {}
+  # FIX: backend "s3" {} تم حذفه من هنا
+  # الـ backend config موجود في backend.tf في نفس الـ directory
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -85,7 +91,7 @@ module "vault" {
   oidc_provider_url = module.cluster.oidc_provider_url
 }
 
-# ── Cross-Region Results Sync — EU Side ──────────────────────────────────
+# ── Cross-Region Results Sync — EU Side ──────────────────
 resource "aws_s3_bucket" "results_sync" {
   bucket = "platform-results-sync-eu-west-1"
   tags = {
@@ -172,7 +178,7 @@ resource "aws_iam_role_policy" "replication" {
   })
 }
 
-# ── Outputs ───────────────────────────────────────────────────────────────
+# ── Outputs ───────────────────────────────────────────────
 output "cluster_endpoint" {
   value = module.cluster.cluster_endpoint
 }
