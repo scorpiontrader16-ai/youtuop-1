@@ -1,0 +1,76 @@
+---
+# ── Rate limit للـ ingestion service ────────────────────────────────────────
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: ingestion-ratelimit
+  namespace: platform
+  labels:
+    app.kubernetes.io/component: api-gateway
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: GRPCRoute
+    name: ingestion-grpc
+    namespace: platform
+  rateLimit:
+    type: Global
+    global:
+      rules:
+        # ── Enterprise — unlimited (مفيش rule = مفيش limit) ──────────────
+        # ── Business — 5000 request/min ──────────────────────────────────
+        - clientSelectors:
+            - headers:
+                - name: x-plan
+                  value: business
+          limit:
+            requests: 5000
+            unit: Minute
+        # ── Pro — 1000 request/min ────────────────────────────────────────
+        - clientSelectors:
+            - headers:
+                - name: x-plan
+                  value: pro
+          limit:
+            requests: 1000
+            unit: Minute
+        # ── Basic — 100 request/min ───────────────────────────────────────
+        - clientSelectors:
+            - headers:
+                - name: x-plan
+                  value: basic
+          limit:
+            requests: 100
+            unit: Minute
+        # ── Default — مفيش plan header = 50 request/min ──────────────────
+        - limit:
+            requests: 50
+            unit: Minute
+
+---
+# ── Rate limit للـ auth routes ───────────────────────────────────────────────
+# مش بيعتمد على الـ plan — brute force protection
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: auth-ratelimit
+  namespace: platform
+  labels:
+    app.kubernetes.io/component: api-gateway
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: auth-routes
+    namespace: platform
+  rateLimit:
+    type: Global
+    global:
+      rules:
+        # ── Login — 10 attempts/min per IP ───────────────────────────────
+        - clientSelectors:
+            - sourceCIDR:
+                type: Distinct
+          limit:
+            requests: 10
+            unit: Minute
