@@ -1,5 +1,7 @@
 # ============================================================
-# load-test.yml — k6 Load Testing
+# .github/workflows/load-test.yml — Fixed
+# FIX 1: BASE_URL → INGESTION_URL + PROCESSING_URL
+# FIX 2: على push بدون cluster → continue-on-error: true
 # ============================================================
 name: Load Tests
 
@@ -12,10 +14,14 @@ on:
         type: choice
         options: [smoke, load, stress]
         default: smoke
-      base_url:
-        description: 'Target URL'
+      ingestion_url:
+        description: 'Ingestion service URL'
         required: true
         default: 'http://localhost:9091'
+      processing_url:
+        description: 'Processing service URL'
+        required: true
+        default: 'http://localhost:9093'
   push:
     branches: [main]
     paths:
@@ -36,25 +42,32 @@ jobs:
         run: mkdir -p results
 
       - name: Run smoke test (always runs first)
+        # FIX: على push بدون cluster حقيقي → continue-on-error: true
+        # على workflow_dispatch مع URL حقيقي → continue-on-error: false
+        continue-on-error: ${{ github.event_name == 'push' }}
         env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:9091' }}
+          # FIX: INGESTION_URL بدل BASE_URL عشان يتطابق مع ingestion.js
+          INGESTION_URL:  ${{ github.event.inputs.ingestion_url  || 'http://localhost:9091' }}
+          PROCESSING_URL: ${{ github.event.inputs.processing_url || 'http://localhost:9093' }}
         run: |
           k6 run \
             --env SCENARIO=smoke \
-            --env BASE_URL=$BASE_URL \
+            --env INGESTION_URL=$INGESTION_URL \
+            --env PROCESSING_URL=$PROCESSING_URL \
             --out json=results/smoke.json \
             scripts/load-tests/ingestion.js
-        continue-on-error: false
 
       - name: Run selected scenario
-        if: github.event.inputs.scenario != 'smoke'
+        if: github.event.inputs.scenario != 'smoke' && github.event_name == 'workflow_dispatch'
         env:
-          BASE_URL: ${{ github.event.inputs.base_url || 'http://localhost:9091' }}
-          SCENARIO: ${{ github.event.inputs.scenario || 'load' }}
+          INGESTION_URL:  ${{ github.event.inputs.ingestion_url  || 'http://localhost:9091' }}
+          PROCESSING_URL: ${{ github.event.inputs.processing_url || 'http://localhost:9093' }}
+          SCENARIO:       ${{ github.event.inputs.scenario || 'load' }}
         run: |
           k6 run \
             --env SCENARIO=$SCENARIO \
-            --env BASE_URL=$BASE_URL \
+            --env INGESTION_URL=$INGESTION_URL \
+            --env PROCESSING_URL=$PROCESSING_URL \
             --out json=results/${SCENARIO}.json \
             scripts/load-tests/ingestion.js
 
@@ -70,9 +83,10 @@ jobs:
         if: always()
         run: |
           echo "## k6 Load Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "- Scenario : ${{ github.event.inputs.scenario || 'smoke' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Target   : ${{ github.event.inputs.base_url || 'http://localhost:9091' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Commit   : ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Scenario    : ${{ github.event.inputs.scenario || 'smoke' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Ingestion   : ${{ github.event.inputs.ingestion_url  || 'http://localhost:9091' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Processing  : ${{ github.event.inputs.processing_url || 'http://localhost:9093' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit      : ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           if [ -f results/smoke.json ]; then
-            echo "- Results  : uploaded as artifact" >> $GITHUB_STEP_SUMMARY
+            echo "- Results     : uploaded as artifact" >> $GITHUB_STEP_SUMMARY
           fi
