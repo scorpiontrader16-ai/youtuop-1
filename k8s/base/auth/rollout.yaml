@@ -1,0 +1,148 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: auth
+  namespace: platform
+  labels:
+    app: auth
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      serviceAccountName: auth
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: auth
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: auth
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: auth
+      volumes:
+        - name: jwt-key
+          secret:
+            secretName: auth-jwt-key
+      containers:
+        - name: auth
+          image: ghcr.io/scorpiontrader16-ai/youtuop-1/auth:1.0.0
+          ports:
+            - name: http
+              containerPort: 9092
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              value: "9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: otel-collector:4317
+            - name: KEYCLOAK_URL
+              value: http://keycloak:8080
+            - name: KEYCLOAK_REALM
+              value: youtuop
+            - name: KEYCLOAK_CLIENT_ID
+              value: youtuop-backend
+            - name: JWT_ISSUER
+              value: https://auth.youtuop-1.com
+            - name: JWT_PRIVATE_KEY_PATH
+              value: /secrets/jwt/private.pem
+            - name: REDIS_ADDR
+              value: redis:6379
+          envFrom:
+            - secretRef:
+                name: auth-secrets
+          volumeMounts:
+            - name: jwt-key
+              mountPath: /secrets/jwt
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9092
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9092
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+  strategy:
+    canary:
+      canaryService: auth-canary
+      stableService: auth-stable
+      trafficRouting:
+        nginx:
+          stableIngress: auth-stable
+      steps:
+        - setWeight: 10
+        - pause:
+            duration: 2m
+        - analysis:
+            templates:
+              - templateName: auth-error-rate-check
+        - setWeight: 50
+        - pause:
+            duration: 5m
+        - analysis:
+            templates:
+              - templateName: auth-error-rate-check
+        - setWeight: 100
+      autoPromotionEnabled: false
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: auth-error-rate-check
+  namespace: platform
+spec:
+  metrics:
+    - name: error-rate
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://victoria-metrics.monitoring.svc.cluster.local:8428
+          query: |
+            sum(rate(auth_login_total{status=~"keycloak_error|db_error"}[2m]))
+            /
+            sum(rate(auth_login_total[2m]))
+      successCondition: result[0] < 0.01
