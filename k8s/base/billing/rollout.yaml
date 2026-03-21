@@ -1,0 +1,130 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: billing
+  namespace: platform
+  labels:
+    app: billing
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: billing
+  template:
+    metadata:
+      labels:
+        app: billing
+    spec:
+      serviceAccountName: billing
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: billing
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: billing
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: billing
+      containers:
+        - name: billing
+          image: ghcr.io/scorpiontrader16-ai/youtuop-1/billing:1.0.0
+          ports:
+            - name: http
+              containerPort: 9093
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              value: "9093"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: otel-collector:4317
+            - name: FRONTEND_URL
+              value: "https://app.youtuop-1.com"
+          envFrom:
+            - secretRef:
+                name: billing-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9093
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9093
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+  strategy:
+    canary:
+      canaryService: billing-canary
+      stableService: billing-stable
+      trafficRouting:
+        nginx:
+          stableIngress: billing-stable
+      steps:
+        - setWeight: 10
+        - pause:
+            duration: 2m
+        - analysis:
+            templates:
+              - templateName: billing-error-rate-check
+        - setWeight: 50
+        - pause:
+            duration: 5m
+        - analysis:
+            templates:
+              - templateName: billing-error-rate-check
+        - setWeight: 100
+      autoPromotionEnabled: false
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: billing-error-rate-check
+  namespace: platform
+spec:
+  metrics:
+    - name: error-rate
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://victoria-metrics.monitoring.svc.cluster.local:8428
+          query: |
+            sum(rate(billing_http_request_duration_seconds_count{path=~"/v1/billing/.*",status=~"5.*"}[2m]))
+            /
+            sum(rate(billing_http_request_duration_seconds_count{path=~"/v1/billing/.*"}[2m]))
+      successCondition: result[0] < 0.01
