@@ -1,0 +1,28 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: jwt-policy-admin
+  namespace: platform
+  labels:
+    app.kubernetes.io/component: api-gateway
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: admin-routes
+    namespace: platform
+  jwt:
+    providers:
+      - name: youtuop-auth
+        issuer: "https://auth.youtuop-1.com"
+        remoteJWKS:
+          uri: "http://auth-stable.platform.svc.cluster.local:9092/.well-known/jwks.json"
+        claimToHeaders:
+          - claim: sub
+            header: x-user-id
+          - claim: tid
+            header: x-tenant-id
+          - claim: role
+            header: x-role
+          - claim: email
+            header: x-user-email
