@@ -6,10 +6,10 @@ import (
 
 	"github.com/stripe/stripe-go/v81"
 	"github.com/stripe/stripe-go/v81/client"
+	"github.com/stripe/stripe-go/v81/webhook"
 )
 
 // PlanPriceIDs — Stripe Price IDs لكل plan
-// بيتجيبوا من env variables لأنهم بيتغيروا بين environments
 type PriceIDs struct {
 	Basic      string
 	Pro        string
@@ -98,7 +98,6 @@ func (c *Client) UpdateSubscriptionPlan(ctx context.Context, stripeSubID, newPla
 		return nil, err
 	}
 
-	// جيب الـ subscription الأولاً لتحديد الـ item ID
 	sub, err := c.sc.Subscriptions.Get(stripeSubID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("get stripe subscription: %w", err)
@@ -118,7 +117,6 @@ func (c *Client) UpdateSubscriptionPlan(ctx context.Context, stripeSubID, newPla
 		Metadata: map[string]string{
 			"plan": newPlan,
 		},
-		// Proration: تحسب الفرق فوراً
 		ProrationBehavior: stripe.String("create_prorations"),
 	}
 
@@ -129,13 +127,12 @@ func (c *Client) UpdateSubscriptionPlan(ctx context.Context, stripeSubID, newPla
 	return updated, nil
 }
 
-// CancelSubscription يلغي الـ subscription في نهاية الـ period
+// CancelSubscription يلغي الـ subscription
 func (c *Client) CancelSubscription(ctx context.Context, stripeSubID string, immediately bool) error {
 	if immediately {
 		_, err := c.sc.Subscriptions.Cancel(stripeSubID, nil)
 		return err
 	}
-	// إلغاء في نهاية الـ billing period
 	params := &stripe.SubscriptionParams{
 		CancelAtPeriodEnd: stripe.Bool(true),
 	}
@@ -143,7 +140,7 @@ func (c *Client) CancelSubscription(ctx context.Context, stripeSubID string, imm
 	return err
 }
 
-// CreatePortalSession ينشئ Stripe Customer Portal session للـ tenant
+// CreatePortalSession ينشئ Stripe Customer Portal session
 func (c *Client) CreatePortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
 	params := &stripe.BillingPortalSessionParams{
 		Customer:  stripe.String(customerID),
@@ -156,7 +153,8 @@ func (c *Client) CreatePortalSession(ctx context.Context, customerID, returnURL 
 	return session.URL, nil
 }
 
-// ConstructWebhookEvent يتحقق من الـ webhook signature ويبني الـ event
+// ConstructWebhookEvent يتحقق من الـ webhook signature
+// في stripe-go v72+ الـ function موجودة في webhook package
 func ConstructWebhookEvent(payload []byte, sigHeader, webhookSecret string) (stripe.Event, error) {
-	return stripe.ConstructEvent(payload, sigHeader, webhookSecret)
+	return webhook.ConstructEvent(payload, sigHeader, webhookSecret)
 }
