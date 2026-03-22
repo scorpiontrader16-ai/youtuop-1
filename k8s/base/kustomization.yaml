@@ -6,6 +6,7 @@ resources:
   - ingestion
   - auth
   - billing
+  - notifications
   - processing
   - hydration
   - cilium
