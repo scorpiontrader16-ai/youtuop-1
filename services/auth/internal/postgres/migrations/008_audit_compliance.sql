@@ -1,193 +1,151 @@
 -- ============================================================
--- 008_audit_compliance.sql
--- M14 Audit & Compliance
--- يبني فوق كل الـ tables الموجودة
+-- 009_control_plane.sql
+-- M15 Control Plane — system config + kill switches
 -- ============================================================
 
 -- +goose Up
 -- +goose StatementBegin
 
--- ── 1. Audit Log (append-only — immutable) ──────────────────
--- مفيش UPDATE، مفيش DELETE — بس INSERT
--- مقسم بالشهر للـ performance
-CREATE TABLE IF NOT EXISTS audit_log (
-    id          BIGSERIAL    NOT NULL,
-    tenant_id   TEXT,
-    user_id     TEXT,
-    action      TEXT         NOT NULL,
-    resource    TEXT         NOT NULL,
-    resource_id TEXT,
-    old_data    JSONB,
-    new_data    JSONB,
-    ip_address  TEXT,
-    user_agent  TEXT,
-    trace_id    TEXT,
-    status      TEXT         NOT NULL DEFAULT 'success',
-    error       TEXT,
-    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_audit_status CHECK (status IN ('success', 'failure'))
-) PARTITION BY RANGE (created_at);
-
--- ── Partitions ───────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS audit_log_2025_q1
-    PARTITION OF audit_log
-    FOR VALUES FROM ('2025-01-01') TO ('2025-04-01');
-
-CREATE TABLE IF NOT EXISTS audit_log_2025_q2
-    PARTITION OF audit_log
-    FOR VALUES FROM ('2025-04-01') TO ('2025-07-01');
-
-CREATE TABLE IF NOT EXISTS audit_log_2025_q3
-    PARTITION OF audit_log
-    FOR VALUES FROM ('2025-07-01') TO ('2025-10-01');
-
-CREATE TABLE IF NOT EXISTS audit_log_2025_q4
-    PARTITION OF audit_log
-    FOR VALUES FROM ('2025-10-01') TO ('2026-01-01');
-
-CREATE TABLE IF NOT EXISTS audit_log_2026_q1
-    PARTITION OF audit_log
-    FOR VALUES FROM ('2026-01-01') TO ('2026-04-01');
-
-CREATE TABLE IF NOT EXISTS audit_log_2026_q2
-    PARTITION OF audit_log
-    FOR VALUES FROM ('2026-04-01') TO ('2026-07-01');
-
-CREATE TABLE IF NOT EXISTS audit_log_2026_q3
-    PARTITION OF audit_log
-    FOR VALUES FROM ('2026-07-01') TO ('2026-10-01');
-
-CREATE TABLE IF NOT EXISTS audit_log_2026_q4
-    PARTITION OF audit_log
-    FOR VALUES FROM ('2026-10-01') TO ('2027-01-01');
-
--- ── Indexes على كل الـ partitions ────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_audit_tenant_created
-    ON audit_log (tenant_id, created_at DESC)
-    WHERE tenant_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_audit_user_created
-    ON audit_log (user_id, created_at DESC)
-    WHERE user_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_audit_resource
-    ON audit_log (resource, resource_id, created_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_audit_action
-    ON audit_log (action, created_at DESC);
-
--- ── 2. Data Retention Policies ───────────────────────────────
-CREATE TABLE IF NOT EXISTS data_retention_policies (
-    id              TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-    resource_type   TEXT        NOT NULL UNIQUE,
-    retention_days  INTEGER     NOT NULL,
-    auto_delete     BOOLEAN     NOT NULL DEFAULT FALSE,
-    description     TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_retention_days CHECK (retention_days > 0)
+-- ── 1. System Configuration (dynamic, no restart needed) ────
+CREATE TABLE IF NOT EXISTS system_config (
+    key         TEXT        PRIMARY KEY,
+    value       JSONB       NOT NULL,
+    description TEXT,
+    updated_by  TEXT        REFERENCES users(id),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ── 3. GDPR Data Requests ────────────────────────────────────
-CREATE TABLE IF NOT EXISTS gdpr_requests (
-    id            TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-    tenant_id     TEXT        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    user_id       TEXT        NOT NULL REFERENCES users(id)   ON DELETE CASCADE,
-    type          TEXT        NOT NULL,
-    status        TEXT        NOT NULL DEFAULT 'pending',
-    requested_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    processed_at  TIMESTAMPTZ,
-    expires_at    TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days',
-    data_export   JSONB,
-    notes         TEXT,
-    CONSTRAINT chk_gdpr_type   CHECK (type   IN ('access', 'deletion', 'portability', 'rectification')),
-    CONSTRAINT chk_gdpr_status CHECK (status IN ('pending', 'processing', 'completed', 'rejected'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_gdpr_tenant
-    ON gdpr_requests (tenant_id, requested_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_gdpr_user
-    ON gdpr_requests (user_id, requested_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_gdpr_status
-    ON gdpr_requests (status, expires_at)
-    WHERE status = 'pending';
-
--- ── 4. Legal Hold ────────────────────────────────────────────
--- تجميد بيانات لو في قضية قانونية
-CREATE TABLE IF NOT EXISTS legal_holds (
+-- ── 2. Kill Switches ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS kill_switches (
     id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-    tenant_id   TEXT        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    reason      TEXT        NOT NULL,
-    placed_by   TEXT        NOT NULL REFERENCES users(id),
-    placed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    released_at TIMESTAMPTZ,
-    active      BOOLEAN     NOT NULL DEFAULT TRUE,
-    notes       TEXT
+    name        TEXT        NOT NULL UNIQUE,
+    description TEXT,
+    enabled     BOOLEAN     NOT NULL DEFAULT FALSE,
+    scope       TEXT        NOT NULL DEFAULT 'global',
+    scope_id    TEXT,
+    enabled_by  TEXT        REFERENCES users(id),
+    enabled_at  TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_kill_switch_scope CHECK (
+        scope IN ('global', 'tenant', 'service')
+    )
 );
 
-CREATE INDEX IF NOT EXISTS idx_legal_holds_tenant
-    ON legal_holds (tenant_id)
+-- ── 3. Maintenance Mode ──────────────────────────────────────
+CREATE TABLE IF NOT EXISTS maintenance_windows (
+    id           TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+    title        TEXT        NOT NULL,
+    message      TEXT        NOT NULL,
+    starts_at    TIMESTAMPTZ NOT NULL,
+    ends_at      TIMESTAMPTZ,
+    active       BOOLEAN     NOT NULL DEFAULT FALSE,
+    created_by   TEXT        REFERENCES users(id),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_maintenance_dates CHECK (ends_at IS NULL OR ends_at > starts_at)
+);
+
+-- ── 4. Announcement Banners ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS announcements (
+    id          TEXT        PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+    title       TEXT        NOT NULL,
+    message     TEXT        NOT NULL,
+    type        TEXT        NOT NULL DEFAULT 'info',
+    active      BOOLEAN     NOT NULL DEFAULT TRUE,
+    starts_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ends_at     TIMESTAMPTZ,
+    created_by  TEXT        REFERENCES users(id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_announcement_type CHECK (
+        type IN ('info', 'warning', 'critical')
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_announcements_active
+    ON announcements (active, starts_at)
     WHERE active = TRUE;
 
--- ── 5. Compliance Dashboard Snapshots ────────────────────────
-CREATE TABLE IF NOT EXISTS compliance_snapshots (
-    id           BIGSERIAL    PRIMARY KEY,
-    tenant_id    TEXT         REFERENCES tenants(id) ON DELETE CASCADE,
-    period_start TIMESTAMPTZ  NOT NULL,
-    period_end   TIMESTAMPTZ  NOT NULL,
-    metrics      JSONB        NOT NULL DEFAULT '{}',
-    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+-- ── 5. Impersonation Log ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS impersonation_log (
+    id              BIGSERIAL   PRIMARY KEY,
+    admin_user_id   TEXT        NOT NULL REFERENCES users(id),
+    target_user_id  TEXT        NOT NULL REFERENCES users(id),
+    tenant_id       TEXT        REFERENCES tenants(id),
+    reason          TEXT        NOT NULL,
+    started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ended_at        TIMESTAMPTZ,
+    ip_address      TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_compliance_snapshots_tenant
-    ON compliance_snapshots (tenant_id, period_start DESC)
-    WHERE tenant_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_impersonation_admin
+    ON impersonation_log (admin_user_id, started_at DESC);
 
--- ── 6. Prevent DELETE/UPDATE on audit_log ────────────────────
--- يمنع أي تعديل على الـ audit records — tamper-proof
--- نستخدم trigger لأن RULE لا تعمل على partitioned tables
-CREATE OR REPLACE FUNCTION audit_log_immutable()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+CREATE INDEX IF NOT EXISTS idx_impersonation_target
+    ON impersonation_log (target_user_id, started_at DESC);
+
+-- ── 6. WriteAudit Function (يُستدعى من كل service) ──────────
+-- helper function تكتب في audit_log بشكل آمن
+CREATE OR REPLACE FUNCTION write_audit(
+    p_tenant_id   TEXT,
+    p_user_id     TEXT,
+    p_action      TEXT,
+    p_resource    TEXT,
+    p_resource_id TEXT DEFAULT NULL,
+    p_old_data    JSONB DEFAULT NULL,
+    p_new_data    JSONB DEFAULT NULL,
+    p_ip_address  TEXT DEFAULT NULL,
+    p_trace_id    TEXT DEFAULT NULL,
+    p_status      TEXT DEFAULT 'success',
+    p_error       TEXT DEFAULT NULL
+) RETURNS VOID LANGUAGE plpgsql AS $$
 BEGIN
-    RAISE EXCEPTION 'audit_log is immutable — DELETE and UPDATE are not permitted';
+    INSERT INTO audit_log (
+        tenant_id, user_id, action, resource, resource_id,
+        old_data, new_data, ip_address, trace_id, status, error
+    ) VALUES (
+        p_tenant_id, p_user_id, p_action, p_resource, p_resource_id,
+        p_old_data, p_new_data, p_ip_address, p_trace_id, p_status, p_error
+    );
+EXCEPTION WHEN OTHERS THEN
+    -- Audit لازم ميفشلش ويأثر على الـ main operation
+    -- بنسجل الـ error ونكمل
+    RAISE WARNING 'write_audit failed: %', SQLERRM;
 END;
 $$;
 
-CREATE TRIGGER trg_audit_log_no_delete
-    BEFORE DELETE ON audit_log
-    FOR EACH ROW EXECUTE FUNCTION audit_log_immutable();
+-- ── 7. Seed: Default System Config ───────────────────────────
+INSERT INTO system_config (key, value, description) VALUES
+    ('platform.maintenance_mode',     'false',                    'Global maintenance mode flag'),
+    ('platform.max_tenants',          '1000',                     'Maximum number of active tenants'),
+    ('platform.default_trial_days',   '14',                       'Default trial period in days'),
+    ('platform.rate_limit_enabled',   'true',                     'Enable/disable rate limiting globally'),
+    ('platform.new_signups_enabled',  'true',                     'Allow new tenant signups'),
+    ('billing.stripe_mode',           '"live"',                   'Stripe mode: live or test'),
+    ('notifications.email_enabled',   'true',                     'Enable email notifications globally'),
+    ('security.mfa_required',         'false',                    'Require MFA for all users')
+ON CONFLICT (key) DO NOTHING;
 
-CREATE TRIGGER trg_audit_log_no_update
-    BEFORE UPDATE ON audit_log
-    FOR EACH ROW EXECUTE FUNCTION audit_log_immutable();
-
--- ── 7. Seed: Default Retention Policies ──────────────────────
-INSERT INTO data_retention_policies (resource_type, retention_days, auto_delete, description) VALUES
-    ('audit_log',           2555, FALSE, 'Audit logs — 7 years (regulatory requirement)'),
-    ('sessions',             90,  TRUE,  'User sessions — 90 days'),
-    ('refresh_tokens',       30,  TRUE,  'Refresh tokens — 30 days'),
-    ('notifications',       365,  TRUE,  'In-app notifications — 1 year'),
-    ('email_log',           365,  FALSE, 'Email audit log — 1 year'),
-    ('billing_events',     2555,  FALSE, 'Billing events — 7 years (financial records)'),
-    ('usage_records',       730,  FALSE, 'Usage records — 2 years'),
-    ('warm_events',          30,  TRUE,  'Hot event cache — 30 days'),
-    ('gdpr_requests',       365,  FALSE, 'GDPR requests — 1 year after completion')
-ON CONFLICT (resource_type) DO NOTHING;
+-- ── 8. Seed: Default Kill Switches ───────────────────────────
+INSERT INTO kill_switches (name, description, enabled, scope) VALUES
+    ('ingestion.kafka_consumer',   'Stop consuming from Redpanda',           FALSE, 'service'),
+    ('processing.engine',          'Disable Rust processing engine',          FALSE, 'service'),
+    ('billing.stripe_webhooks',    'Stop processing Stripe webhooks',         FALSE, 'service'),
+    ('notifications.email',        'Stop sending all emails',                 FALSE, 'service'),
+    ('auth.new_logins',            'Prevent new login attempts',              FALSE, 'global'),
+    ('auth.new_signups',           'Prevent new tenant signups',              FALSE, 'global'),
+    ('api.write_operations',       'Disable all write operations (read-only)', FALSE, 'global')
+ON CONFLICT (name) DO NOTHING;
 
 -- +goose StatementEnd
 
 -- +goose Down
 -- +goose StatementBegin
 
-DROP TRIGGER IF EXISTS trg_audit_log_no_update ON audit_log;
-DROP TRIGGER IF EXISTS trg_audit_log_no_delete ON audit_log;
-DROP FUNCTION IF EXISTS audit_log_immutable();
+DROP FUNCTION IF EXISTS write_audit(TEXT,TEXT,TEXT,TEXT,TEXT,JSONB,JSONB,TEXT,TEXT,TEXT,TEXT);
 
-DROP TABLE IF EXISTS compliance_snapshots    CASCADE;
-DROP TABLE IF EXISTS legal_holds             CASCADE;
-DROP TABLE IF EXISTS gdpr_requests           CASCADE;
-DROP TABLE IF EXISTS data_retention_policies CASCADE;
-DROP TABLE IF EXISTS audit_log               CASCADE;
+DROP TABLE IF EXISTS impersonation_log    CASCADE;
+DROP TABLE IF EXISTS announcements        CASCADE;
+DROP TABLE IF EXISTS maintenance_windows  CASCADE;
+DROP TABLE IF EXISTS kill_switches        CASCADE;
+DROP TABLE IF EXISTS system_config        CASCADE;
 
 -- +goose StatementEnd
