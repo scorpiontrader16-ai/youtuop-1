@@ -1,0 +1,102 @@
+---
+# ── Velero BackupStorageLocation ────────────────────────────────────────────
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: aws-eu-west-1
+  namespace: velero
+spec:
+  provider: aws
+  objectStorage:
+    bucket: platform-velero-backups-eu-west-1
+    prefix: k8s-backups
+  config:
+    region: eu-west-1
+    kmsKeyId: alias/platform-velero
+  default: true
+
+---
+# ── Velero VolumeSnapshotLocation ───────────────────────────────────────────
+apiVersion: velero.io/v1
+kind: VolumeSnapshotLocation
+metadata:
+  name: aws-eu-west-1
+  namespace: velero
+spec:
+  provider: aws
+  config:
+    region: eu-west-1
+
+---
+# ── Daily Full Backup — كل 24 ساعة ─────────────────────────────────────────
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: platform-daily-full
+  namespace: velero
+  labels:
+    app.kubernetes.io/component: disaster-recovery
+spec:
+  schedule: "0 2 * * *"    # كل يوم الساعة 2 AM UTC
+  useOwnerReferencesInBackup: false
+  template:
+    includedNamespaces:
+      - platform
+      - monitoring
+      - velero
+    storageLocation: aws-eu-west-1
+    volumeSnapshotLocations:
+      - aws-eu-west-1
+    ttl: 720h    # 30 يوم
+    snapshotVolumes: true
+    includeClusterResources: true
+    labelSelector:
+      matchExpressions:
+        - key: app.kubernetes.io/managed-by
+          operator: NotIn
+          values: ["excluded-from-backup"]
+
+---
+# ── Hourly Incremental Backup — platform namespace فقط ──────────────────────
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: platform-hourly-incremental
+  namespace: velero
+  labels:
+    app.kubernetes.io/component: disaster-recovery
+spec:
+  schedule: "0 * * * *"    # كل ساعة
+  useOwnerReferencesInBackup: false
+  template:
+    includedNamespaces:
+      - platform
+    storageLocation: aws-eu-west-1
+    ttl: 48h     # 2 يوم فقط للـ incremental
+    snapshotVolumes: false   # بدون volume snapshots — سريع
+    includeClusterResources: false
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/component: stateful
+
+---
+# ── Pre-Upgrade Backup (يتشغل قبل أي deployment) ───────────────────────────
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: platform-pre-upgrade
+  namespace: velero
+  labels:
+    app.kubernetes.io/component: disaster-recovery
+spec:
+  schedule: "30 1 * * 0"   # الأحد 1:30 AM — قبل maintenance window
+  useOwnerReferencesInBackup: false
+  template:
+    includedNamespaces:
+      - platform
+    storageLocation: aws-eu-west-1
+    volumeSnapshotLocations:
+      - aws-eu-west-1
+    ttl: 2160h   # 90 يوم
+    snapshotVolumes: true
+    includeClusterResources: true
