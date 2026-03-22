@@ -1,0 +1,130 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: feature-flags
+  namespace: platform
+  labels:
+    app: feature-flags
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: feature-flags
+  template:
+    metadata:
+      labels:
+        app: feature-flags
+    spec:
+      serviceAccountName: feature-flags
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: feature-flags
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: feature-flags
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: feature-flags
+      containers:
+        - name: feature-flags
+          image: ghcr.io/scorpiontrader16-ai/youtuop-1/feature-flags:1.0.0
+          ports:
+            - name: http
+              containerPort: 9096
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              value: "9096"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: otel-collector:4317
+            - name: REDIS_ADDR
+              value: redis:6379
+          envFrom:
+            - secretRef:
+                name: feature-flags-secrets
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9096
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9096
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+  strategy:
+    canary:
+      canaryService: feature-flags-canary
+      stableService: feature-flags-stable
+      trafficRouting:
+        nginx:
+          stableIngress: feature-flags-stable
+      steps:
+        - setWeight: 10
+        - pause:
+            duration: 2m
+        - analysis:
+            templates:
+              - templateName: feature-flags-error-rate-check
+        - setWeight: 50
+        - pause:
+            duration: 5m
+        - analysis:
+            templates:
+              - templateName: feature-flags-error-rate-check
+        - setWeight: 100
+      autoPromotionEnabled: false
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: feature-flags-error-rate-check
+  namespace: platform
+spec:
+  metrics:
+    - name: error-rate
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://victoria-metrics.monitoring.svc.cluster.local:8428
+          query: |
+            sum(rate(feature_flags_http_request_duration_seconds_count{path=~"/v1/flags.*",status=~"5.*"}[2m]))
+            /
+            sum(rate(feature_flags_http_request_duration_seconds_count{path=~"/v1/flags.*"}[2m]))
+      successCondition: result[0] < 0.01
