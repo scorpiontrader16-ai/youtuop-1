@@ -9,5 +9,7 @@ resources:
   - http-route-auth.yaml
   - http-route-billing.yaml
   - http-route-notifications.yaml
+  - http-route-admin.yaml
   - security-policy-jwt.yaml
+  - security-policy-admin.yaml
   - backend-traffic-policy-ratelimit.yaml
