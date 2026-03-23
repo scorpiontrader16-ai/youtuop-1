@@ -1,0 +1,17 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: auth
+  namespace: platform
+spec:
+  scaleTargetRef:
+    name: auth
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://victoria-metrics.monitoring.svc.cluster.local:8428
+        metricName: auth_requests_per_second
+        query: sum(rate(auth_http_requests_total[2m]))
+        threshold: "50"
