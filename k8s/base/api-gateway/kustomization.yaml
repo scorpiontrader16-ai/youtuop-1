@@ -15,7 +15,9 @@ resources:
   - http-route-search.yaml
   - http-route-legal.yaml
   - http-route-analytics.yaml
+  - http-route-jobs.yaml
   - security-policy-jwt.yaml
   - security-policy-admin.yaml
   - security-policy-search.yaml
   - security-policy-analytics.yaml
+  - security-policy-jobs.yaml
