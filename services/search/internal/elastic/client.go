@@ -9,6 +9,7 @@ import (
     "net/http"
 
     "github.com/elastic/go-elasticsearch/v8"
+    "github.com/elastic/go-elasticsearch/v8/esapi"
 )
 
 type Client struct {
@@ -100,4 +101,9 @@ func (c *Client) Search(ctx context.Context, req SearchRequest) (*SearchResult, 
     }
 
     return out, nil
+}
+
+// Info returns cluster info for health checks
+func (c *Client) Info() (*esapi.Response, error) {
+    return c.es.Info()
 }
