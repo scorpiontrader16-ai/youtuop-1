@@ -11,7 +11,6 @@ import (
     "time"
 
     "github.com/jackc/pgx/v5/pgxpool"
-    "github.com/pressly/goose/v3"
 )
 
 type Client struct {
@@ -27,7 +26,6 @@ type Config struct {
     SSLMode  string
 }
 
-// ConfigFromEnv reads database configuration from environment variables
 func ConfigFromEnv() Config {
     port, _ := strconv.Atoi(getEnv("POSTGRES_PORT", "5432"))
     return Config{
@@ -164,7 +162,6 @@ type Tenant struct {
     ID   string
     Slug string
     Plan string
-    // ... other fields
 }
 
 func (c *Client) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, error) {
@@ -208,7 +205,7 @@ func (c *Client) GetUserRole(ctx context.Context, userID, tenantID string) (stri
 func (c *Client) AssignRole(ctx context.Context, userID, tenantID, role string) error {
     _, err := c.db.Exec(ctx,
         `INSERT INTO user_roles (user_id, tenant_id, role) VALUES ($1, $2, $3)
-         ON CONFLICT (user_id, tenant_id) DO UPDATE SET role = $3`,
+         ON CONFLICT (user_id, tenant_id) DO UPDATE SET role = $3, updated_at = NOW()`,
         userID, tenantID, role,
     )
     return err
@@ -253,9 +250,6 @@ func (c *Client) GetSessionByID(ctx context.Context, sessionID string) (*Session
 }
 
 func (c *Client) StoreRefreshToken(ctx context.Context, sessionID, refreshTokenHash string, expiresAt time.Time) error {
-    // We store refresh tokens in a separate table or in the session table.
-    // For simplicity, we'll add a column to active_sessions for refresh token hash.
-    // Let's assume active_sessions has a refresh_token_hash column.
     _, err := c.db.Exec(ctx,
         `UPDATE active_sessions SET refresh_token_hash = $1, refresh_expires_at = $2 WHERE session_id = $3`,
         refreshTokenHash, expiresAt, sessionID,
@@ -538,7 +532,6 @@ func (c *Client) ValidateAPIKey(ctx context.Context, keyHash string) (userID, te
 
 // ── Utility ───────────────────────────────────────────────────────────────
 
-// HashToken creates a SHA-256 hash of a token for storage
 func HashToken(token string) string {
     hash := sha256.Sum256([]byte(token))
     return hex.EncodeToString(hash[:])
