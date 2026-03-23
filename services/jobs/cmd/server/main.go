@@ -131,7 +131,7 @@ func main() {
 
     // HTTP server
     httpMux := http.NewServeMux()
-    setupHTTPHandlers(httpMux, pool, asynqClient)
+    setupHTTPHandlers(httpMux, pool, redisClient, asynqClient)
 
     httpPort := os.Getenv("HTTP_PORT")
     if httpPort == "" {
@@ -181,7 +181,7 @@ func main() {
     slog.Info("shutdown complete")
 }
 
-func setupHTTPHandlers(mux *http.ServeMux, pool *pgxpool.Pool, asynqClient *asynq.Client) {
+func setupHTTPHandlers(mux *http.ServeMux, pool *pgxpool.Pool, redisClient *redis.Client, asynqClient *asynq.Client) {
     // Health
     mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusOK)
@@ -193,9 +193,10 @@ func setupHTTPHandlers(mux *http.ServeMux, pool *pgxpool.Pool, asynqClient *asyn
             w.Write([]byte("postgres not ready"))
             return
         }
-        if err := asynqClient.Ping(); err != nil {
+        // Check Redis (used by asynq)
+        if err := redisClient.Ping(context.Background()).Err(); err != nil {
             w.WriteHeader(http.StatusServiceUnavailable)
-            w.Write([]byte("asynq not ready"))
+            w.Write([]byte("redis not ready"))
             return
         }
         w.WriteHeader(http.StatusOK)
