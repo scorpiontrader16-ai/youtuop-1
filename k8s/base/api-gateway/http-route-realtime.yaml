@@ -1,0 +1,37 @@
+---
+# ── Real-time WebSocket route ────────────────────────────────────────────────
+# WebSocket upgrade محتاج timeout مختلف عن REST
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: realtime-routes
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: realtime
+    app.kubernetes.io/component: api-gateway
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: platform
+      sectionName: https
+  rules:
+    # ── WebSocket endpoint — JWT في query param ──────────────
+    - matches:
+        - path:
+            type: Exact
+            value: /ws
+      backendRefs:
+        - name: realtime-stable
+          port: 9099
+          weight: 90
+        - name: realtime-canary
+          port: 9099
+          weight: 10
+    # ── Health ───────────────────────────────────────────────
+    - matches:
+        - path:
+            type: Exact
+            value: /healthz/realtime
+      backendRefs:
+        - name: realtime-stable
+          port: 9099
