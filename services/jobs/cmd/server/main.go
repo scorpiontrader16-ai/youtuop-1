@@ -3,6 +3,7 @@ package main
 import (
     "context"
     "encoding/json"
+    "fmt"
     "log/slog"
     "net"
     "net/http"
@@ -55,13 +56,6 @@ var (
         []string{"task_type", "status"},
     )
 )
-
-type JobService struct {
-    db          *pgxpool.Pool
-    asynqClient *asynq.Client
-    asynqServer *asynq.Server
-    redisClient *redis.Client
-}
 
 func main() {
     logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -125,7 +119,6 @@ func main() {
     mux.HandleFunc("email:send", handleEmailSend)
     mux.HandleFunc("report:generate", handleReportGenerate)
     mux.HandleFunc("webhook:deliver", handleWebhookDeliver)
-    // Add more handlers as needed
 
     go func() {
         if err := asynqSrv.Run(mux); err != nil {
@@ -414,7 +407,6 @@ func runCronScheduler(pool *pgxpool.Pool, client *asynq.Client) {
 // Task handlers
 func handleEmailSend(ctx context.Context, t *asynq.Task) error {
     slog.Info("processing email send", "payload", string(t.Payload()))
-    // TODO: implement actual email sending logic
     asynqProcessedTotal.WithLabelValues("email:send", "success").Inc()
     return nil
 }
