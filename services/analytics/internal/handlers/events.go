@@ -1,8 +1,6 @@
 package handlers
 
 import (
-    "context"
-    "encoding/json"
     "net/http"
     "time"
 
@@ -41,7 +39,6 @@ func (h *EventHandler) Track(c *fiber.Ctx) error {
         ev.Timestamp = time.Now().UTC()
     }
 
-    // استخراج IP و user agent من الطلب
     ip := c.IP()
     ua := c.Get("User-Agent")
 
