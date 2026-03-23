@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: search
+  namespace: platform
+spec:
+  podSelector:
+    matchLabels:
+      app: search
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform
+          podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - port: 9095
+          protocol: TCP
+        - port: 8095
+          protocol: TCP
