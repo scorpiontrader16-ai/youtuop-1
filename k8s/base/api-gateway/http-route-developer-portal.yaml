@@ -1,0 +1,58 @@
+---
+# ── Developer Portal API routes (JWT protected) ──────────────────────────────
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: developer-portal-routes
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: developer-portal
+    app.kubernetes.io/component: api-gateway
+spec:
+  parentRefs:
+    - name: platform-gateway
+      namespace: platform
+      sectionName: https
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /v1/developer
+      backendRefs:
+        - name: developer-portal-stable
+          port: 9097
+          weight: 90
+        - name: developer-portal-canary
+          port: 9097
+          weight: 10
+
+---
+# ── JWT SecurityPolicy for developer-portal ──────────────────────────────────
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: jwt-policy-developer-portal
+  namespace: platform
+  labels:
+    app.kubernetes.io/component: api-gateway
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: developer-portal-routes
+    namespace: platform
+  jwt:
+    providers:
+      - name: youtuop-auth
+        issuer: "https://auth.youtuop-1.com"
+        remoteJWKS:
+          uri: "http://auth-stable.platform.svc.cluster.local:9092/.well-known/jwks.json"
+        claimToHeaders:
+          - claim: sub
+            header: x-user-id
+          - claim: tid
+            header: x-tenant-id
+          - claim: plan
+            header: x-plan
+          - claim: role
+            header: x-role
