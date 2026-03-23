@@ -1,0 +1,23 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: realtime
+  namespace: platform
+  labels:
+    app: realtime
+spec:
+  scaleTargetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: realtime
+  minReplicaCount: 3
+  maxReplicaCount: 20
+  cooldownPeriod: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://victoria-metrics.monitoring.svc.cluster.local:8428
+        metricName: realtime_websocket_connections_per_pod
+        query: |
+          realtime_websocket_connections / count(up{job="realtime"})
+        threshold: "1000"
