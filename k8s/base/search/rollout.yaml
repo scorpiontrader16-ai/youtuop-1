@@ -1,0 +1,153 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: search
+  namespace: platform
+  labels:
+    app: search
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: search
+  template:
+    metadata:
+      labels:
+        app: search
+    spec:
+      serviceAccountName: search
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: search
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: search
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: search
+      containers:
+        - name: search
+          image: ghcr.io/scorpiontrader16-ai/youtuop-1/search:1.0.0
+          ports:
+            - name: grpc
+              containerPort: 8095
+              protocol: TCP
+            - name: http
+              containerPort: 9095
+              protocol: TCP
+          env:
+            - name: GRPC_PORT
+              value: "8095"
+            - name: HTTP_PORT
+              value: "9095"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: otel-collector:4317
+            - name: ELASTICSEARCH_URL
+              value: http://elasticsearch.monitoring.svc.cluster.local:9200
+          envFrom:
+            - secretRef:
+                name: search-secrets
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9095
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9095
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+  strategy:
+    canary:
+      canaryService: search-canary
+      stableService: search-stable
+      trafficRouting:
+        nginx:
+          stableIngress: search-stable
+      steps:
+        - setWeight: 10
+        - pause: { duration: 2m }
+        - analysis:
+            templates:
+              - templateName: error-rate-check
+        - setWeight: 50
+        - pause: { duration: 5m }
+        - analysis:
+            templates:
+              - templateName: error-rate-check
+              - templateName: latency-check
+        - setWeight: 100
+      autoPromotionEnabled: false
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: error-rate-check
+  namespace: platform
+spec:
+  metrics:
+    - name: error-rate
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://victoria-metrics.monitoring.svc.cluster.local:8428
+          query: |
+            sum(rate(search_http_requests_total{status=~"5.*"}[2m]))
+            /
+            sum(rate(search_http_requests_total[2m]))
+      successCondition: result[0] < 0.01
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: latency-check
+  namespace: platform
+spec:
+  metrics:
+    - name: p99-latency
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://victoria-metrics.monitoring.svc.cluster.local:8428
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(search_http_request_duration_seconds_bucket[2m]))
+              by (le)
+            )
+      successCondition: result[0] < 0.5
