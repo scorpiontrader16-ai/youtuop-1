@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: legal-pages
+  namespace: platform
+data:
+  terms.html: |
+    <!DOCTYPE html>
+    <html>
+    <head><title>Terms of Service</title></head>
+    <body>
+      <h1>Terms of Service</h1>
+      <p>This platform is for informational purposes only. Not financial advice.</p>
+      <p>All data provided "as is". No guarantees of accuracy.</p>
+    </body>
+    </html>
+  privacy.html: |
+    <!DOCTYPE html>
+    <html>
+    <head><title>Privacy Policy</title></head>
+    <body>
+      <h1>Privacy Policy</h1>
+      <p>We collect personal data for authentication, analytics, and compliance.</p>
+      <p>We do not sell your data.</p>
+    </body>
+    </html>
+  cookies.html: |
+    <!DOCTYPE html>
+    <html>
+    <head><title>Cookie Policy</title></head>
+    <body>
+      <h1>Cookie Policy</h1>
+      <p>We use essential cookies for authentication and security.</p>
+      <p>Optional analytics cookies can be disabled in settings.</p>
+    </body>
+    </html>
+  dpa.html: |
+    <!DOCTYPE html>
+    <html>
+    <head><title>Data Processing Agreement</title></head>
+    <body>
+      <h1>Data Processing Agreement (DPA)</h1>
+      <p>This DPA applies to enterprise customers and complies with GDPR.</p>
+      <p>For details, contact compliance@platform.com.</p>
+    </body>
+    </html>
