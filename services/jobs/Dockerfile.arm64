@@ -1,0 +1,28 @@
+# syntax=docker/dockerfile:1.7
+FROM arm64v8/golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache git ca-certificates
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+    -ldflags="-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
+    -trimpath \
+    -o /jobs-server ./cmd/server
+
+FROM arm64v8/alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=builder /jobs-server /jobs-server
+
+EXPOSE 9097 8097
+
+USER 1000:1000
+
+ENTRYPOINT ["/jobs-server"]
