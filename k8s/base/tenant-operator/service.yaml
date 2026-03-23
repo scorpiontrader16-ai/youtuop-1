@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tenant-operator-stable
+  namespace: platform
+  labels:
+    app: tenant-operator
+    rollout: stable
+spec:
+  selector:
+    app: tenant-operator
+  ports:
+    - name: http
+      port: 9099
+      targetPort: 9099
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tenant-operator-canary
+  namespace: platform
+  labels:
+    app: tenant-operator
+    rollout: canary
+spec:
+  selector:
+    app: tenant-operator
+  ports:
+    - name: http
+      port: 9099
+      targetPort: 9099
