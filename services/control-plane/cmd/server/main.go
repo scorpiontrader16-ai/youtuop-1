@@ -1,367 +1,355 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"strconv"
-	"syscall"
-	"time"
+    "context"
+    "encoding/json"
+    "log/slog"
+    "net"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.uber.org/zap"
-
-	"github.com/aminpola2001-ctrl/youtuop/services/control-plane/internal/postgres"
+    "github.com/jackc/pgx/v5/pgxpool"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
+    "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+    "go.opentelemetry.io/otel/propagation"
+    "go.opentelemetry.io/otel/sdk/resource"
+    sdktrace "go.opentelemetry.io/otel/sdk/trace"
+    semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 var version = "dev"
 
-var (
-	adminActionsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "control_plane_admin_actions_total",
-		Help: "Total admin actions performed",
-	}, []string{"action", "target_type"})
-
-	httpRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "control_plane_http_request_duration_seconds",
-		Buckets: prometheus.DefBuckets,
-	}, []string{"method", "path"})
-)
-
-type Config struct {
-	HTTPPort     int
-	OTLPEndpoint string
-}
-
-func loadConfig() (Config, error) {
-	httpPort, err := getEnvInt("HTTP_PORT", 9095)
-	if err != nil {
-		return Config{}, fmt.Errorf("HTTP_PORT: %w", err)
-	}
-	return Config{
-		HTTPPort:     httpPort,
-		OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
-	}, nil
+type server struct {
+    db *pgxpool.Pool
 }
 
 func main() {
-	log, err := zap.NewProduction()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to init logger: %v\n", err)
-		os.Exit(1)
-	}
-	defer log.Sync() //nolint:errcheck
+    logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+    slog.SetDefault(logger)
 
-	log.Info("starting control-plane service", zap.String("version", version))
+    shutdown, err := initTracer()
+    if err != nil {
+        slog.Error("failed to init tracer", "error", err)
+    }
+    defer shutdown(context.Background())
 
-	cfg, err := loadConfig()
-	if err != nil {
-		log.Fatal("invalid config", zap.Error(err))
-	}
+    pgConn := os.Getenv("POSTGRES_CONN")
+    if pgConn == "" {
+        pgConn = "postgres://postgres:postgres@postgres.platform.svc.cluster.local:5432/platform?sslmode=disable"
+    }
+    pool, err := pgxpool.New(context.Background(), pgConn)
+    if err != nil {
+        slog.Error("failed to connect postgres", "error", err)
+        os.Exit(1)
+    }
+    defer pool.Close()
 
-	tp, err := initTracer(cfg.OTLPEndpoint)
-	if err != nil {
-		log.Fatal("failed to init tracer", zap.Error(err))
-	}
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		tp.Shutdown(ctx) //nolint:errcheck
-	}()
-	otel.SetTracerProvider(tp)
+    s := &server{db: pool}
 
-	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+    mux := http.NewServeMux()
 
-	startupCtx, startupCancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer startupCancel()
+    // Health checks
+    mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte("ok"))
+    })
+    mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+        if err := pool.Ping(context.Background()); err != nil {
+            w.WriteHeader(http.StatusServiceUnavailable)
+            w.Write([]byte("postgres not ready"))
+            return
+        }
+        w.WriteHeader(http.StatusOK)
+        w.Write([]byte("ready"))
+    })
 
-	pgClient, err := postgres.WaitForPostgres(startupCtx, postgres.ConfigFromEnv(), slogLogger)
-	if err != nil {
-		log.Fatal("postgres unavailable", zap.Error(err))
-	}
-	defer pgClient.Close()
+    // ========== LEGAL PAGES (served from mounted volume) ==========
+    mux.HandleFunc("GET /legal/terms", func(w http.ResponseWriter, r *http.Request) {
+        http.ServeFile(w, r, "/app/legal/terms.html")
+    })
+    mux.HandleFunc("GET /legal/privacy", func(w http.ResponseWriter, r *http.Request) {
+        http.ServeFile(w, r, "/app/legal/privacy.html")
+    })
+    mux.HandleFunc("GET /legal/cookies", func(w http.ResponseWriter, r *http.Request) {
+        http.ServeFile(w, r, "/app/legal/cookies.html")
+    })
+    mux.HandleFunc("GET /legal/dpa", func(w http.ResponseWriter, r *http.Request) {
+        http.ServeFile(w, r, "/app/legal/dpa.html")
+    })
 
-	if err := pgClient.Migrate(startupCtx); err != nil {
-		log.Fatal("migrations failed", zap.Error(err))
-	}
+    // ========== COMPLIANCE & LEGAL ENDPOINTS ==========
+    mux.HandleFunc("GET /api/v1/legal/holds", s.handleLegalHolds)
+    mux.HandleFunc("POST /api/v1/legal/holds", s.handleLegalHolds)
+    mux.HandleFunc("POST /api/v1/compliance/reports/mifid", s.handleGenerateMifidReport)
+    mux.HandleFunc("POST /api/v1/disclaimers/accept", s.handleAcceptDisclaimer)
 
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
+    // Metrics
+    mux.Handle("GET /metrics", promhttp.Handler())
 
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "ok")
-	})
+    // Wrap with otel
+    handler := otelhttp.NewHandler(mux, "control-plane-http")
 
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
-		defer cancel()
-		if err := pgClient.DB().PingContext(ctx); err != nil {
-			http.Error(w, "postgres not ready", http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "ready")
-	})
+    httpPort := os.Getenv("HTTP_PORT")
+    if httpPort == "" {
+        httpPort = "9093"
+    }
+    httpSrv := &http.Server{
+        Addr:    ":" + httpPort,
+        Handler: handler,
+    }
 
-	// ── Tenant Management ─────────────────────────────────────────────────
-	mux.HandleFunc("GET /v1/admin/tenants", func(w http.ResponseWriter, r *http.Request) {
-		tenants, err := pgClient.ListTenants(r.Context(), "", 100, 0)
-		if err != nil {
-			log.Error("list tenants failed", zap.Error(err))
-			jsonError(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		jsonOK(w, map[string]any{"tenants": tenants, "count": len(tenants)})
-	})
+    grpcPort := os.Getenv("GRPC_PORT")
+    if grpcPort == "" {
+        grpcPort = "8093"
+    }
+    grpcSrv := grpc.NewServer()
+    grpc_health_v1.RegisterHealthServer(grpcSrv, &healthServer{})
 
-	mux.HandleFunc("POST /v1/admin/tenants/{id}/suspend", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		id := r.PathValue("id")
-		adminID := r.Header.Get("x-user-id")
-		if err := pgClient.SuspendTenant(ctx, id, adminID, "suspended_by_admin"); err != nil {
-			log.Error("suspend tenant failed", zap.Error(err))
-			jsonError(w, "action failed", http.StatusInternalServerError)
-			return
-		}
-		adminActionsTotal.WithLabelValues("suspend_tenant", "tenant").Inc()
-		log.Info("tenant suspended", zap.String("tenant_id", id), zap.String("admin_id", adminID))
-		jsonOK(w, map[string]string{"status": "ok"})
-	})
+    go func() {
+        slog.Info("starting HTTP server", "port", httpPort)
+        if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            slog.Error("http server error", "error", err)
+        }
+    }()
+    go func() {
+        slog.Info("starting gRPC server", "port", grpcPort)
+        lis, err := net.Listen("tcp", ":"+grpcPort)
+        if err != nil {
+            slog.Error("grpc listen error", "error", err)
+            return
+        }
+        if err := grpcSrv.Serve(lis); err != nil {
+            slog.Error("grpc server error", "error", err)
+        }
+    }()
 
-	mux.HandleFunc("POST /v1/admin/tenants/{id}/reactivate", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		id := r.PathValue("id")
-		adminID := r.Header.Get("x-user-id")
-		if err := pgClient.ReactivateTenant(ctx, id, adminID); err != nil {
-			log.Error("reactivate tenant failed", zap.Error(err))
-			jsonError(w, "action failed", http.StatusInternalServerError)
-			return
-		}
-		adminActionsTotal.WithLabelValues("reactivate_tenant", "tenant").Inc()
-		jsonOK(w, map[string]string{"status": "ok"})
-	})
-
-	// ── User Management ───────────────────────────────────────────────────
-	mux.HandleFunc("GET /v1/admin/users", func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.URL.Query().Get("tenant_id")
-		users, err := pgClient.ListUsers(r.Context(), tenantID, 100, 0)
-		if err != nil {
-			log.Error("list users failed", zap.Error(err))
-			jsonError(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		jsonOK(w, map[string]any{"users": users, "count": len(users)})
-	})
-
-	mux.HandleFunc("POST /v1/admin/users/{id}/ban", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		id := r.PathValue("id")
-		adminID := r.Header.Get("x-user-id")
-		if err := pgClient.BanUser(ctx, id, adminID, "banned_by_admin"); err != nil {
-			log.Error("ban user failed", zap.Error(err))
-			jsonError(w, "action failed", http.StatusInternalServerError)
-			return
-		}
-		adminActionsTotal.WithLabelValues("ban_user", "user").Inc()
-		log.Warn("user banned", zap.String("user_id", id), zap.String("admin_id", adminID))
-		jsonOK(w, map[string]string{"status": "ok"})
-	})
-
-	mux.HandleFunc("POST /v1/admin/users/{id}/force-logout", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		id := r.PathValue("id")
-		adminID := r.Header.Get("x-user-id")
-		count, err := pgClient.ForceLogout(ctx, id, adminID)
-		if err != nil {
-			log.Error("force logout failed", zap.Error(err))
-			jsonError(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		adminActionsTotal.WithLabelValues("force_logout", "user").Inc()
-		jsonOK(w, map[string]any{"sessions_revoked": count})
-	})
-
-	// ── Kill Switches ─────────────────────────────────────────────────────
-	mux.HandleFunc("GET /v1/admin/kill-switches", func(w http.ResponseWriter, r *http.Request) {
-		switches, err := pgClient.ListKillSwitches(r.Context())
-		if err != nil {
-			log.Error("list kill switches failed", zap.Error(err))
-			jsonError(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		jsonOK(w, map[string]any{"kill_switches": switches})
-	})
-
-	mux.HandleFunc("POST /v1/admin/kill-switches/{name}/activate", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		name := r.PathValue("name")
-		adminID := r.Header.Get("x-user-id")
-		if err := pgClient.ToggleKillSwitch(ctx, name, true, adminID); err != nil {
-			jsonError(w, "kill switch not found", http.StatusNotFound)
-			return
-		}
-		adminActionsTotal.WithLabelValues("activate_kill_switch", "service").Inc()
-		log.Warn("kill switch activated", zap.String("name", name), zap.String("admin_id", adminID))
-		jsonOK(w, map[string]any{"name": name, "enabled": true})
-	})
-
-	mux.HandleFunc("POST /v1/admin/kill-switches/{name}/deactivate", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		name := r.PathValue("name")
-		adminID := r.Header.Get("x-user-id")
-		if err := pgClient.ToggleKillSwitch(ctx, name, false, adminID); err != nil {
-			jsonError(w, "kill switch not found", http.StatusNotFound)
-			return
-		}
-		adminActionsTotal.WithLabelValues("deactivate_kill_switch", "service").Inc()
-		jsonOK(w, map[string]any{"name": name, "enabled": false})
-	})
-
-	// ── System Config ─────────────────────────────────────────────────────
-	mux.HandleFunc("GET /v1/admin/config", func(w http.ResponseWriter, r *http.Request) {
-		config, err := pgClient.ListConfig(r.Context())
-		if err != nil {
-			log.Error("get config failed", zap.Error(err))
-			jsonError(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		jsonOK(w, config)
-	})
-
-	mux.HandleFunc("PUT /v1/admin/config/{key}", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		key := r.PathValue("key")
-		adminID := r.Header.Get("x-user-id")
-
-		var body struct {
-			Value json.RawMessage `json:"value"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			jsonError(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		if err := pgClient.SetConfig(ctx, key, body.Value, adminID); err != nil {
-			log.Error("set config failed", zap.String("key", key), zap.Error(err))
-			jsonError(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		adminActionsTotal.WithLabelValues("set_config", "system").Inc()
-		jsonOK(w, map[string]string{"key": key, "status": "updated"})
-	})
-
-	// ── Audit Log ─────────────────────────────────────────────────────────
-	mux.HandleFunc("GET /v1/admin/audit", func(w http.ResponseWriter, r *http.Request) {
-		q := r.URL.Query()
-		entries, err := pgClient.QueryAuditLog(r.Context(),
-			q.Get("tenant_id"), q.Get("user_id"), q.Get("action"), 100)
-		if err != nil {
-			log.Error("query audit log failed", zap.Error(err))
-			jsonError(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		jsonOK(w, map[string]any{"entries": entries, "count": len(entries)})
-	})
-
-	// ── System Health ─────────────────────────────────────────────────────
-	mux.HandleFunc("GET /v1/admin/health", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-		health := map[string]any{"status": "ok", "timestamp": time.Now().UTC()}
-		if err := pgClient.DB().PingContext(ctx); err != nil {
-			health["postgres"] = "degraded"
-			health["status"] = "degraded"
-		} else {
-			health["postgres"] = "ok"
-		}
-		jsonOK(w, health)
-	})
-
-	httpServer := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
-		Handler:      withMetrics(mux),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
-	}
-
-	go func() {
-		log.Info("HTTP server started", zap.Int("port", cfg.HTTPPort))
-		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatal("HTTP server failed", zap.Error(err))
-		}
-	}()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-quit
-	log.Info("shutting down", zap.String("signal", sig.String()))
-
-	shutCtx, shutCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutCancel()
-	if err := httpServer.Shutdown(shutCtx); err != nil {
-		log.Error("HTTP shutdown error", zap.Error(err))
-	}
-	log.Info("shutdown complete")
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+    <-quit
+    slog.Info("shutting down servers...")
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    httpSrv.Shutdown(ctx)
+    grpcSrv.GracefulStop()
+    slog.Info("shutdown complete")
 }
 
-func withMetrics(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		httpRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(time.Since(start).Seconds())
-	})
+// ========== HANDLERS ==========
+
+func (s *server) handleLegalHolds(w http.ResponseWriter, r *http.Request) {
+    tenantID := r.Header.Get("X-Tenant-ID")
+    if tenantID == "" {
+        http.Error(w, "missing tenant id", http.StatusBadRequest)
+        return
+    }
+
+    switch r.Method {
+    case http.MethodGet:
+        rows, err := s.db.Query(r.Context(),
+            `SELECT id, entity_type, entity_id, reason, status, created_by, created_at, released_at
+             FROM legal_holds
+             WHERE tenant_id = $1
+             ORDER BY created_at DESC`,
+            tenantID,
+        )
+        if err != nil {
+            slog.Error("failed to query legal holds", "error", err)
+            http.Error(w, "database error", http.StatusInternalServerError)
+            return
+        }
+        defer rows.Close()
+
+        var holds []map[string]interface{}
+        for rows.Next() {
+            var id int64
+            var entityType, entityID, reason, status, createdBy string
+            var createdAt, releasedAt *time.Time
+            if err := rows.Scan(&id, &entityType, &entityID, &reason, &status, &createdBy, &createdAt, &releasedAt); err != nil {
+                continue
+            }
+            hold := map[string]interface{}{
+                "id":          id,
+                "entity_type": entityType,
+                "entity_id":   entityID,
+                "reason":      reason,
+                "status":      status,
+                "created_by":  createdBy,
+                "created_at":  createdAt,
+                "released_at": releasedAt,
+            }
+            holds = append(holds, hold)
+        }
+        json.NewEncoder(w).Encode(holds)
+
+    case http.MethodPost:
+        var req struct {
+            EntityType string `json:"entity_type"`
+            EntityID   string `json:"entity_id"`
+            Reason     string `json:"reason"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+            http.Error(w, "invalid request", http.StatusBadRequest)
+            return
+        }
+        userID := r.Header.Get("X-User-ID")
+        if userID == "" {
+            userID = "system"
+        }
+        _, err := s.db.Exec(r.Context(),
+            `INSERT INTO legal_holds (tenant_id, entity_type, entity_id, reason, status, created_by)
+             VALUES ($1, $2, $3, $4, 'active', $5)`,
+            tenantID, req.EntityType, req.EntityID, req.Reason, userID,
+        )
+        if err != nil {
+            slog.Error("failed to create legal hold", "error", err)
+            http.Error(w, "failed to create hold", http.StatusInternalServerError)
+            return
+        }
+        w.WriteHeader(http.StatusCreated)
+        json.NewEncoder(w).Encode(map[string]string{"status": "created"})
+    }
 }
 
-func jsonError(w http.ResponseWriter, msg string, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg}) //nolint:errcheck
+func (s *server) handleGenerateMifidReport(w http.ResponseWriter, r *http.Request) {
+    tenantID := r.Header.Get("X-Tenant-ID")
+    if tenantID == "" {
+        http.Error(w, "missing tenant id", http.StatusBadRequest)
+        return
+    }
+    userID := r.Header.Get("X-User-ID")
+    if userID == "" {
+        userID = "system"
+    }
+    var req struct {
+        PeriodStart time.Time `json:"period_start"`
+        PeriodEnd   time.Time `json:"period_end"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "invalid request", http.StatusBadRequest)
+        return
+    }
+
+    // Generate report data (simplified for demo)
+    reportData := map[string]interface{}{
+        "summary":      "MiFID II Best Execution Report",
+        "period_start": req.PeriodStart,
+        "period_end":   req.PeriodEnd,
+        "metrics": map[string]interface{}{
+            "total_orders": 0,
+            "executed":     0,
+        },
+    }
+    dataJSON, _ := json.Marshal(reportData)
+
+    _, err := s.db.Exec(r.Context(),
+        `INSERT INTO regulatory_reports (tenant_id, report_type, period_start, period_end, report_data, generated_by, status)
+         VALUES ($1, 'mifid_best_execution', $2, $3, $4, $5, 'generated')`,
+        tenantID, req.PeriodStart, req.PeriodEnd, dataJSON, userID,
+    )
+    if err != nil {
+        slog.Error("failed to generate mifid report", "error", err)
+        http.Error(w, "failed to generate report", http.StatusInternalServerError)
+        return
+    }
+    w.WriteHeader(http.StatusAccepted)
+    json.NewEncoder(w).Encode(map[string]string{"status": "report generation started"})
 }
 
-func jsonOK(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v) //nolint:errcheck
+func (s *server) handleAcceptDisclaimer(w http.ResponseWriter, r *http.Request) {
+    tenantID := r.Header.Get("X-Tenant-ID")
+    if tenantID == "" {
+        http.Error(w, "missing tenant id", http.StatusBadRequest)
+        return
+    }
+    userID := r.Header.Get("X-User-ID")
+    if userID == "" {
+        userID = "anonymous"
+    }
+
+    var req struct {
+        DisclaimerType string `json:"disclaimer_type"`
+        Version        string `json:"version"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "invalid request", http.StatusBadRequest)
+        return
+    }
+
+    ip := r.Header.Get("X-Forwarded-For")
+    if ip == "" {
+        ip = r.RemoteAddr
+    }
+    ua := r.UserAgent()
+
+    _, err := s.db.Exec(r.Context(),
+        `INSERT INTO disclaimer_acceptances (user_id, tenant_id, disclaimer_type, version, ip_address, user_agent)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        userID, tenantID, req.DisclaimerType, req.Version, ip, ua,
+    )
+    if err != nil {
+        slog.Error("failed to record disclaimer acceptance", "error", err)
+        http.Error(w, "failed to record acceptance", http.StatusInternalServerError)
+        return
+    }
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(map[string]string{"status": "accepted"})
 }
 
-func initTracer(endpoint string) (*sdktrace.TracerProvider, error) {
-	exp, err := otlptracegrpc.New(context.Background(),
-		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithInsecure(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exp),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-	), nil
+func initTracer() (func(context.Context) error, error) {
+    endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if endpoint == "" {
+        return func(context.Context) error { return nil }, nil
+    }
+
+    ctx := context.Background()
+    exporter, err := otlptracegrpc.New(ctx,
+        otlptracegrpc.WithEndpoint(endpoint),
+        otlptracegrpc.WithInsecure(),
+    )
+    if err != nil {
+        return nil, err
+    }
+
+    res, err := resource.New(ctx,
+        resource.WithAttributes(
+            semconv.ServiceName("control-plane"),
+            semconv.ServiceVersion(version),
+        ),
+        resource.WithFromEnv(),
+        resource.WithTelemetrySDK(),
+    )
+    if err != nil {
+        return nil, err
+    }
+
+    tp := sdktrace.NewTracerProvider(
+        sdktrace.WithBatcher(exporter),
+        sdktrace.WithResource(res),
+    )
+    otel.SetTracerProvider(tp)
+    otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+        propagation.TraceContext{},
+        propagation.Baggage{},
+    ))
+
+    return tp.Shutdown, nil
 }
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
+type healthServer struct {
+    grpc_health_v1.UnimplementedHealthServer
 }
 
-func getEnvInt(key string, fallback int) (int, error) {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback, nil
-	}
-	i, err := strconv.Atoi(v)
-	if err != nil {
-		return 0, fmt.Errorf("invalid value %q for %s", v, key)
-	}
-	return i, nil
+func (s *healthServer) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
+    return &grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING}, nil
+}
+
+func (s *healthServer) Watch(req *grpc_health_v1.HealthCheckRequest, stream grpc_health_v1.Health_WatchServer) error {
+    return stream.Send(&grpc_health_v1.HealthCheckResponse{Status: grpc_health_v1.HealthCheckResponse_SERVING})
 }
