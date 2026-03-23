@@ -68,7 +68,10 @@ func (h *RecoveryHandler) RequestReset(w http.ResponseWriter, r *http.Request) {
     if h.notifier != nil {
         _ = h.notifier.SendEmail(req.Email, "Password Reset", emailBody)
     } else {
-        h.logger.Info("recovery email would be sent", "to", req.Email, "url", resetURL)
+        h.logger.Info("recovery email would be sent",
+            zap.String("to", req.Email),
+            zap.String("url", resetURL),
+        )
     }
 
     w.WriteHeader(http.StatusAccepted)
