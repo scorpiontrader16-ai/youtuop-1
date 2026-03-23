@@ -10,6 +10,7 @@ resources:
   - control-plane
   - feature-flags
   - developer-portal
+  - ml-engine
   - processing
   - hydration
   - cilium
