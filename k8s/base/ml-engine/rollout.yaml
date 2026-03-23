@@ -1,0 +1,150 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: ml-engine
+  namespace: platform
+  labels:
+    app: ml-engine
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: ml-engine
+  template:
+    metadata:
+      labels:
+        app: ml-engine
+    spec:
+      serviceAccountName: ml-engine
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: ml-engine
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: ml-engine
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: ml-engine
+      containers:
+        - name: ml-engine
+          image: ghcr.io/scorpiontrader16-ai/youtuop-1/ml-engine:1.0.0
+          ports:
+            - name: http
+              containerPort: 9098
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "9098"
+            - name: OTEL_ENDPOINT
+              value: otel-collector:4317
+            - name: REDIS_ADDR
+              value: redis:6379
+            - name: MODEL_ARTIFACTS_BUCKET
+              value: platform-ml-artifacts
+            - name: AWS_REGION
+              value: us-east-1
+            - name: FEATURE_CACHE_TTL
+              value: "300"
+            - name: MAX_BATCH_SIZE
+              value: "64"
+          envFrom:
+            - secretRef:
+                name: ml-engine-secrets
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9098
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9098
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # Python needs write access for tmp files
+            capabilities:
+              drop: ["ALL"]
+  strategy:
+    canary:
+      canaryService: ml-engine-canary
+      stableService: ml-engine-stable
+      trafficRouting:
+        nginx:
+          stableIngress: ml-engine-stable
+      steps:
+        - setWeight: 10
+        - pause:
+            duration: 5m
+        - analysis:
+            templates:
+              - templateName: ml-engine-error-rate-check
+        - setWeight: 50
+        - pause:
+            duration: 10m
+        - analysis:
+            templates:
+              - templateName: ml-engine-error-rate-check
+        - setWeight: 100
+      autoPromotionEnabled: false
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: ml-engine-error-rate-check
+  namespace: platform
+spec:
+  metrics:
+    - name: error-rate
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://victoria-metrics.monitoring.svc.cluster.local:8428
+          query: |
+            sum(rate(ml_engine_predictions_total{status="error"}[5m]))
+            /
+            sum(rate(ml_engine_predictions_total[5m]))
+      successCondition: result[0] < 0.05
+    - name: prediction-latency-p99
+      interval: 60s
+      failureLimit: 3
+      provider:
+        prometheus:
+          address: http://victoria-metrics.monitoring.svc.cluster.local:8428
+          query: |
+            histogram_quantile(0.99,
+              sum(rate(ml_engine_prediction_latency_seconds_bucket[5m])) by (le)
+            )
+      successCondition: result[0] < 1.0
