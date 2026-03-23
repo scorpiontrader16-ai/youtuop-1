@@ -3,7 +3,6 @@ package main
 import (
     "context"
     "encoding/json"
-    "fmt"
     "log/slog"
     "net"
     "net/http"
@@ -93,13 +92,11 @@ func main() {
     })
 
     mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-        // Check PostgreSQL
         if err := pgClient.Pool().Ping(context.Background()); err != nil {
             w.WriteHeader(http.StatusServiceUnavailable)
             w.Write([]byte("postgres not ready"))
             return
         }
-        // Check Elasticsearch using Info() instead of search on _cat
         _, err := esClient.Info()
         if err != nil {
             w.WriteHeader(http.StatusServiceUnavailable)
@@ -110,7 +107,6 @@ func main() {
         w.Write([]byte("ready"))
     })
 
-    // Search endpoint with metrics
     mux.HandleFunc("POST /api/v1/search/{index}", func(w http.ResponseWriter, r *http.Request) {
         start := time.Now()
         index := r.PathValue("index")
@@ -138,10 +134,8 @@ func main() {
         json.NewEncoder(w).Encode(result)
     })
 
-    // Metrics endpoint
     mux.Handle("GET /metrics", promhttp.Handler())
 
-    // Wrap with otelhttp to add tracing (but not double metrics)
     handler := otelhttp.NewHandler(mux, "search-http")
 
     httpPort := os.Getenv("HTTP_PORT")
