@@ -11,6 +11,7 @@ resources:
   - feature-flags
   - developer-portal
   - ml-engine
+  - realtime
   - processing
   - hydration
   - cilium
