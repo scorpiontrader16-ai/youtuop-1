@@ -1,3 +1,5 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 resources:
   - gateway-class.yaml
   - gateway.yaml
@@ -9,7 +11,7 @@ resources:
   - http-route-notifications.yaml
   - http-route-developer-portal.yaml
   - http-route-realtime.yaml
-  - http-route-search.yaml          # ← جديد
+  - http-route-search.yaml
   - security-policy-jwt.yaml
   - security-policy-admin.yaml
-  - security-policy-search.yaml     # ← جديد
+  - security-policy-search.yaml
