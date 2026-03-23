@@ -15,6 +15,7 @@ resources:
   - search
   - analytics
   - jobs
+  - tenant-operator
   - processing
   - hydration
   - cilium
