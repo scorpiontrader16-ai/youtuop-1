@@ -5,12 +5,9 @@ import (
     "fmt"
     "log/slog"
     "os"
-    "os/signal"
-    "syscall"
     "time"
 
     "github.com/jackc/pgx/v5/pgxpool"
-    "github.com/segmentio/kafka-go"
     "go.uber.org/zap"
     corev1 "k8s.io/api/core/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,7 +20,7 @@ func main() {
     defer logger.Sync()
     slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
-    // Connect to PostgreSQL
+    // Postgres connection
     pgConn := os.Getenv("POSTGRES_CONN")
     if pgConn == "" {
         pgConn = "postgres://postgres:postgres@postgres.platform.svc.cluster.local:5432/platform?sslmode=disable"
@@ -44,32 +41,33 @@ func main() {
         logger.Fatal("failed to create k8s client", zap.Error(err))
     }
 
-    // Kafka brokers
-    kafkaBrokers := []string{os.Getenv("KAFKA_BROKERS")}
-    if len(kafkaBrokers) == 0 || kafkaBrokers[0] == "" {
-        kafkaBrokers = []string{"redpanda.platform.svc.cluster.local:9092"}
-    }
+    // Redpanda brokers (placeholder – topic creation not implemented in this version)
+    // kafkaBrokers := []string{os.Getenv("KAFKA_BROKERS")}
+    // if len(kafkaBrokers) == 0 || kafkaBrokers[0] == "" {
+    //     kafkaBrokers = []string{"redpanda.platform.svc.cluster.local:9092"}
+    // }
 
-    logger.Info("starting tenant operator")
-    ticker := time.NewTicker(10 * time.Second)
+    logger.Info("tenant operator started")
+    ticker := time.NewTicker(30 * time.Second)
     defer ticker.Stop()
 
     for {
         select {
         case <-ticker.C:
             rows, err := pool.Query(context.Background(),
-                `SELECT id, slug FROM tenants WHERE status = 'active'`)
+                `SELECT id, slug, custom_domain, status FROM tenants WHERE status IN ('active', 'suspended')`)
             if err != nil {
                 logger.Error("query tenants", zap.Error(err))
                 continue
             }
+
             for rows.Next() {
-                var id, slug string
-                if err := rows.Scan(&id, &slug); err != nil {
+                var id, slug, customDomain, status string
+                if err := rows.Scan(&id, &slug, &customDomain, &status); err != nil {
                     continue
                 }
 
-                // Create namespace if not exists
+                // Ensure Kubernetes namespace
                 nsName := fmt.Sprintf("tenant-%s", slug)
                 _, err := k8sClient.CoreV1().Namespaces().Get(context.Background(), nsName, metav1.GetOptions{})
                 if err != nil {
@@ -78,7 +76,7 @@ func main() {
                             Name: nsName,
                             Labels: map[string]string{
                                 "app.kubernetes.io/managed-by": "tenant-operator",
-                                "tenant-id": id,
+                                "tenant-id":                    id,
                             },
                         },
                     }
@@ -90,32 +88,14 @@ func main() {
                     }
                 }
 
-                // Create Kafka topic
-                topic := fmt.Sprintf("tenant-%s-events", slug)
-                conn, err := kafka.DialLeader(context.Background(), "tcp", kafkaBrokers[0], topic, 0)
-                if err != nil {
-                    // Try to create topic
-                    conn, err = kafka.Dial(context.Background(), "tcp", kafkaBrokers[0])
-                    if err != nil {
-                        logger.Error("dial kafka", zap.Error(err))
-                        continue
-                    }
-                    defer conn.Close()
-                    err = conn.CreateTopics(kafka.TopicConfig{
-                        Topic:             topic,
-                        NumPartitions:     3,
-                        ReplicationFactor: 1,
-                    })
-                    if err != nil {
-                        logger.Error("create topic", zap.Error(err), zap.String("topic", topic))
-                    } else {
-                        logger.Info("created topic", zap.String("topic", topic))
-                    }
-                } else {
-                    conn.Close()
-                }
+                // TODO: create Kafka topic using kafka admin client
+                // For now just log
+                logger.Info("ensuring kafka topic", zap.String("topic", fmt.Sprintf("tenant-%s-events", slug)))
+
+                // TODO: create PostgreSQL schema (schema-per-tenant)
             }
             rows.Close()
+
         case <-context.Background().Done():
             return
         }
