@@ -1,7 +1,22 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/monitoring/kustomization.yaml              ║
+# ║  الحالة: ✏️ معدل — M3: إضافة AlertManager + VMAlert                 ║
+# ╚══════════════════════════════════════════════════════════════════════╝
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  # ── الموارد الأصلية ───────────────────────────────────────────────
   - stack.yaml
   - alertrules.yaml
   - slo.yaml
   - dashboards-configmap.yaml
+  # ── M3: AlertManager ──────────────────────────────────────────────
+  - alertmanager-externalsecret.yaml
+  - alertmanager-configmap.yaml
+  - alertmanager-deployment.yaml
+  - alertmanager-service.yaml
+  # ── M3: VMAlert (يقرأ القواعد ويرسلها لـ AlertManager) ───────────
+  - vmalert-serviceaccount.yaml
+  - vmalert-rules-configmap.yaml
+  - vmalert-deployment.yaml
+  - vmalert-service.yaml
