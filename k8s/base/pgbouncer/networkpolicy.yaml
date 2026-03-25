@@ -1,0 +1,48 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/pgbouncer/networkpolicy.yaml           ║
+# ║  الحالة: 🆕 جديد                                                ║
+# ╚══════════════════════════════════════════════════════════════════╝
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Ingress: يسمح فقط لـ pods داخل namespace=platform على port 6432
+# Egress : يسمح فقط بالاتصال بـ postgres:5432 داخل namespace=platform
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pgbouncer-netpol
+  namespace: platform
+  labels:
+    app: pgbouncer
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/component: connection-pooler
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: pgbouncer
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}             # أي pod في نفس namespace (platform)
+      ports:
+        - protocol: TCP
+          port: 6432
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres           # يسمح فقط لـ postgres pod
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:                             # DNS resolution
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
