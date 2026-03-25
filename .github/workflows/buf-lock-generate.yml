@@ -1,0 +1,30 @@
+name: Generate buf.lock
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-lock:
+    name: Generate buf.lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.32.2'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate buf.lock
+        working-directory: proto
+        run: buf dep update
+
+      - name: Commit buf.lock
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: generate proto/buf.lock"
+          file_pattern: proto/buf.lock
