@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hydration
+  namespace: platform
+  labels:
+    app: hydration
+spec:
+  podSelector:
+    matchLabels:
+      app: hydration
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform
+          podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - port: 9092
+          protocol: TCP
