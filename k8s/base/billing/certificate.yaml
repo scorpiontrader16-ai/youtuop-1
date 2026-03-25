@@ -1,0 +1,48 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/billing/certificate.yaml                  
+# ║  الحالة: 🆕 جديد                                                    ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: billing-tls
+  namespace: platform
+  labels:
+    app: billing
+    app.kubernetes.io/name: billing-tls
+    app.kubernetes.io/component: pki
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  secretName: billing-tls-secret
+  duration: 2160h
+  renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - billing
+    - billing.platform
+    - billing.platform.svc
+    - billing.platform.svc.cluster.local
+    - billing-stable
+    - billing-stable.platform
+    - billing-stable.platform.svc
+    - billing-stable.platform.svc.cluster.local
+    - billing-canary
+    - billing-canary.platform
+    - billing-canary.platform.svc
+    - billing-canary.platform.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+  issuerRef:
+    name: platform-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
