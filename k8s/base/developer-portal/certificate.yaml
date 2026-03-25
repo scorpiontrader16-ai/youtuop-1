@@ -1,0 +1,43 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: developer-portal-tls
+  namespace: platform
+  labels:
+    app: developer-portal
+    app.kubernetes.io/name: developer-portal-tls
+    app.kubernetes.io/component: pki
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  secretName: developer-portal-tls-secret
+  duration: 2160h
+  renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - developer-portal
+    - developer-portal.platform
+    - developer-portal.platform.svc
+    - developer-portal.platform.svc.cluster.local
+    - developer-portal-stable
+    - developer-portal-stable.platform
+    - developer-portal-stable.platform.svc
+    - developer-portal-stable.platform.svc.cluster.local
+    - developer-portal-canary
+    - developer-portal-canary.platform
+    - developer-portal-canary.platform.svc
+    - developer-portal-canary.platform.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+  issuerRef:
+    name: platform-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
