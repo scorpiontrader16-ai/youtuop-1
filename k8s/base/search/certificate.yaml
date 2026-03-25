@@ -1,0 +1,43 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: search-tls
+  namespace: platform
+  labels:
+    app: search
+    app.kubernetes.io/name: search-tls
+    app.kubernetes.io/component: pki
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  secretName: search-tls-secret
+  duration: 2160h
+  renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - search
+    - search.platform
+    - search.platform.svc
+    - search.platform.svc.cluster.local
+    - search-stable
+    - search-stable.platform
+    - search-stable.platform.svc
+    - search-stable.platform.svc.cluster.local
+    - search-canary
+    - search-canary.platform
+    - search-canary.platform.svc
+    - search-canary.platform.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+  issuerRef:
+    name: platform-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
