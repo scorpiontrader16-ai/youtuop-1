@@ -1,0 +1,58 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/pgbouncer/configmap.yaml               ║
+# ║  الحالة: 🆕 جديد                                                ║
+# ╚══════════════════════════════════════════════════════════════════╝
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: platform
+  labels:
+    app: pgbouncer
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/component: connection-pooler
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+data:
+  pgbouncer.ini: |
+    [databases]
+    platform = host=postgres.platform.svc.cluster.local port=5432 dbname=platform
+
+    [pgbouncer]
+    ;; ── Connectivity ──────────────────────────────────────────────
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+
+    ;; ── Pooling ───────────────────────────────────────────────────
+    pool_mode             = transaction
+    max_client_conn       = 1000
+    default_pool_size     = 20
+    min_pool_size         = 5
+    reserve_pool_size     = 10
+    reserve_pool_timeout  = 5
+    max_db_connections    = 100
+
+    ;; ── Auth (Enterprise Pattern: auth_query) ─────────────────────
+    auth_type  = md5
+    auth_file  = /etc/pgbouncer/userlist.txt
+    auth_user  = pgbouncer_auth
+    auth_query = SELECT username, password FROM pgbouncer.get_auth($1)
+
+    ;; ── Timeouts ──────────────────────────────────────────────────
+    server_idle_timeout    = 600
+    server_connect_timeout = 15
+    server_login_retry     = 15
+    query_wait_timeout     = 120
+    client_login_timeout   = 60
+
+    ;; ── Logging ───────────────────────────────────────────────────
+    log_connections    = 0
+    log_disconnections = 0
+    log_pooler_errors  = 1
+    stats_period       = 60
+
+    ;; ── Admin ─────────────────────────────────────────────────────
+    admin_users  = pgbouncer_auth
+    stats_users  = pgbouncer_auth
+    ignore_startup_parameters = extra_float_digits
