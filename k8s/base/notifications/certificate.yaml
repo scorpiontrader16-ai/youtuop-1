@@ -1,0 +1,43 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: notifications-tls
+  namespace: platform
+  labels:
+    app: notifications
+    app.kubernetes.io/name: notifications-tls
+    app.kubernetes.io/component: pki
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  secretName: notifications-tls-secret
+  duration: 2160h
+  renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - notifications
+    - notifications.platform
+    - notifications.platform.svc
+    - notifications.platform.svc.cluster.local
+    - notifications-stable
+    - notifications-stable.platform
+    - notifications-stable.platform.svc
+    - notifications-stable.platform.svc.cluster.local
+    - notifications-canary
+    - notifications-canary.platform
+    - notifications-canary.platform.svc
+    - notifications-canary.platform.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+  issuerRef:
+    name: platform-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
