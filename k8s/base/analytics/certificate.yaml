@@ -1,0 +1,43 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: analytics-tls
+  namespace: platform
+  labels:
+    app: analytics
+    app.kubernetes.io/name: analytics-tls
+    app.kubernetes.io/component: pki
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  secretName: analytics-tls-secret
+  duration: 2160h
+  renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - analytics
+    - analytics.platform
+    - analytics.platform.svc
+    - analytics.platform.svc.cluster.local
+    - analytics-stable
+    - analytics-stable.platform
+    - analytics-stable.platform.svc
+    - analytics-stable.platform.svc.cluster.local
+    - analytics-canary
+    - analytics-canary.platform
+    - analytics-canary.platform.svc
+    - analytics-canary.platform.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+  issuerRef:
+    name: platform-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
