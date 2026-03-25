@@ -1,3 +1,7 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: .github/workflows/ci.yml                            ║
+# ║  الحالة: ✏️ معدل — M1: إضافة job validate-alertmanager              ║
+# ╚══════════════════════════════════════════════════════════════════════╝
 name: CI
 
 on:
@@ -45,6 +49,73 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── M1: AlertManager Config Validation ───────────────────────────────
+  # يتحقق من صحة alertmanager-configmap.yaml في كل PR
+  # يستبدل متغيرات ${} بقيم وهمية ثم يشغّل amtool check-config
+  # يفشل CI إذا كان الـ config خاطئاً — قبل الوصول إلى الـ cluster
+  validate-alertmanager:
+    name: Validate AlertManager Config
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install amtool
+        run: |
+          ALERTMANAGER_VERSION="0.27.0"
+          curl -sSL \
+            "https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-amd64.tar.gz" \
+            | tar -xz --strip-components=1 -C /usr/local/bin \
+              "alertmanager-${ALERTMANAGER_VERSION}.linux-amd64/amtool"
+          amtool --version
+
+      - name: Extract config template from ConfigMap
+        run: |
+          # ── الإصلاح: استخدام PyYAML بدلاً من regex ──────────────────────
+          # السبب: regex يتوقف عند أول سطر فارغ داخل YAML literal block
+          # فيُفقد route: و receivers: كاملاً → "no routes provided"
+          # PyYAML يقرأ الـ ConfigMap ويستخرج القيمة مع كامل المحتوى صحيحاً
+          pip install pyyaml --quiet --break-system-packages
+          python3 - << 'PYEOF'
+          import yaml, sys
+
+          with open("k8s/base/monitoring/alertmanager-configmap.yaml") as f:
+              doc = yaml.safe_load(f)
+
+          template = doc.get("data", {}).get("alertmanager.yml.tmpl")
+          if not template:
+              print("ERROR: alertmanager.yml.tmpl not found in ConfigMap", file=sys.stderr)
+              sys.exit(1)
+
+          with open("/tmp/alertmanager.yml.tmpl", "w") as f:
+              f.write(template)
+
+          # التحقق من وجود العناصر الأساسية
+          required = ["route:", "receivers:", "global:"]
+          for key in required:
+              if key not in template:
+                  print(f"ERROR: '{key}' missing from extracted template", file=sys.stderr)
+                  sys.exit(1)
+
+          print("Template extracted successfully")
+          print(f"  Size: {len(template)} chars")
+          PYEOF
+
+      - name: Render template with dummy secrets
+        run: |
+          # استبدال المتغيرات بقيم وهمية للتحقق من صحة الـ config فقط
+          export PAGERDUTY_ROUTING_KEY="dummy-pagerduty-key-for-ci-validation"
+          export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/dummy/for/ci"
+          envsubst < /tmp/alertmanager.yml.tmpl > /tmp/alertmanager.yml
+          echo "Template rendered:"
+          cat /tmp/alertmanager.yml
+
+      - name: Validate AlertManager config
+        run: |
+          amtool check-config /tmp/alertmanager.yml
+          echo "AlertManager config is valid ✓"
 
   trivy-ingestion:
     name: Trivy — Ingestion Service
