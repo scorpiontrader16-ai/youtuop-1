@@ -1,3 +1,8 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/billing/rollout.yaml               ║
+# ║  الحالة: ✏️ معدل — إضافة TLS volume + mount + env vars      ║
+# ╚══════════════════════════════════════════════════════════════╝
+---
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -43,6 +48,11 @@ spec:
               labelSelector:
                 matchLabels:
                   app: billing
+      volumes:
+        # ── ✏️ مُضاف: cert-manager TLS — يُجدَّد تلقائياً كل 90 يوم ──
+        - name: tls
+          secret:
+            secretName: billing-tls-secret
       containers:
         - name: billing
           image: ghcr.io/scorpiontrader16-ai/youtuop-1/billing:1.0.0
@@ -57,9 +67,21 @@ spec:
               value: otel-collector:4317
             - name: FRONTEND_URL
               value: "https://app.youtuop-1.com"
+            # ── ✏️ مُضاف: مسارات TLS ──
+            - name: TLS_CERT_PATH
+              value: /etc/tls/tls.crt
+            - name: TLS_KEY_PATH
+              value: /etc/tls/tls.key
+            - name: TLS_CA_PATH
+              value: /etc/tls/ca.crt
           envFrom:
             - secretRef:
                 name: billing-secrets
+          volumeMounts:
+            # ── ✏️ مُضاف: TLS mount ──
+            - name: tls
+              mountPath: /etc/tls
+              readOnly: true
           resources:
             requests:
               cpu: 100m
