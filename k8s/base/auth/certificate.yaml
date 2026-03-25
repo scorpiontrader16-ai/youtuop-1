@@ -3,13 +3,41 @@ kind: Certificate
 metadata:
   name: auth-tls
   namespace: platform
+  labels:
+    app: auth
+    app.kubernetes.io/name: auth-tls
+    app.kubernetes.io/component: pki
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
 spec:
   secretName: auth-tls-secret
   duration: 2160h
   renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - auth
+    - auth.platform
+    - auth.platform.svc
+    - auth.platform.svc.cluster.local
+    - auth-stable
+    - auth-stable.platform
+    - auth-stable.platform.svc
+    - auth-stable.platform.svc.cluster.local
+    - auth-canary
+    - auth-canary.platform
+    - auth-canary.platform.svc
+    - auth-canary.platform.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
   issuerRef:
     name: platform-ca-issuer
     kind: ClusterIssuer
-  dnsNames:
-    - auth.platform.svc.cluster.local
-    - auth
+    group: cert-manager.io
