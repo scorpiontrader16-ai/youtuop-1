@@ -1,0 +1,43 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: tenant-operator-tls
+  namespace: platform
+  labels:
+    app: tenant-operator
+    app.kubernetes.io/name: tenant-operator-tls
+    app.kubernetes.io/component: pki
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  secretName: tenant-operator-tls-secret
+  duration: 2160h
+  renewBefore: 360h
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS8
+    size: 2048
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - tenant-operator
+    - tenant-operator.platform
+    - tenant-operator.platform.svc
+    - tenant-operator.platform.svc.cluster.local
+    - tenant-operator-stable
+    - tenant-operator-stable.platform
+    - tenant-operator-stable.platform.svc
+    - tenant-operator-stable.platform.svc.cluster.local
+    - tenant-operator-canary
+    - tenant-operator-canary.platform
+    - tenant-operator-canary.platform.svc
+    - tenant-operator-canary.platform.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+  issuerRef:
+    name: platform-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
