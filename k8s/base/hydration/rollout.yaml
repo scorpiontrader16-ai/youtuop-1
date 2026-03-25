@@ -1,0 +1,113 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: hydration
+  namespace: platform
+  labels:
+    app: hydration
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: hydration
+  template:
+    metadata:
+      labels:
+        app: hydration
+    spec:
+      serviceAccountName: hydration
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: hydration
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: hydration
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: hydration
+      volumes:
+        - name: tls
+          secret:
+            secretName: hydration-tls-secret
+      containers:
+        - name: hydration
+          image: ghcr.io/scorpiontrader16-ai/youtuop-1/hydration:1.0.0
+          ports:
+            - name: http
+              containerPort: 9092
+              protocol: TCP
+          env:
+            - name: HTTP_PORT
+              value: "9092"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: otel-collector:4317
+            - name: TLS_CERT_PATH
+              value: /etc/tls/tls.crt
+            - name: TLS_KEY_PATH
+              value: /etc/tls/tls.key
+            - name: TLS_CA_PATH
+              value: /etc/tls/ca.crt
+          envFrom:
+            - secretRef:
+                name: hydration-secrets
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/tls
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9092
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9092
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+  strategy:
+    canary:
+      canaryService: hydration-canary
+      stableService: hydration-stable
+      trafficRouting:
+        nginx:
+          stableIngress: hydration-stable
+      steps:
+        - setWeight: 10
+        - pause: { duration: 2m }
+        - setWeight: 100
+      autoPromotionEnabled: false
