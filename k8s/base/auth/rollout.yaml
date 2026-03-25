@@ -1,6 +1,6 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  المسار الكامل: k8s/base/auth/rollout.yaml                      ║
-# ║  الحالة: ✏️ معدل — M5: TLS volume | M9: POSTGRES_HOST → pgbouncer ║
+# ║  الحالة: ✏️ معدل — M5: JWT_ALGORITHM + TLS | M9: pgbouncer      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 ---
 apiVersion: argoproj.io/v1alpha1
@@ -78,6 +78,11 @@ spec:
               value: https://auth.youtuop-1.com
             - name: JWT_PRIVATE_KEY_PATH
               value: /secrets/jwt/private.pem
+            # ── M5: Crypto Agility — يمكن تغييره لـ ES256 بدون إعادة build ──
+            - name: JWT_ALGORITHM
+              value: "RS256"
+            - name: JWT_KEY_ID
+              value: "v1"
             - name: REDIS_ADDR
               value: redis:6379
             # ── M5: مسارات TLS ─────────────────────────────────────
@@ -88,7 +93,6 @@ spec:
             - name: TLS_CA_PATH
               value: /etc/tls/ca.crt
             # ── M9: تحويل Postgres عبر PgBouncer ───────────────────
-            # env المباشر يأخذ الأولوية على envFrom (AWS SM secret)
             - name: POSTGRES_HOST
               value: pgbouncer.platform.svc.cluster.local
             - name: POSTGRES_PORT
