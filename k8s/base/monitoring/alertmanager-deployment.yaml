@@ -1,0 +1,158 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/monitoring/alertmanager-deployment.yaml    ║
+# ║  الحالة: 🆕 جديد                                                    ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# نمط الـ Secret Injection:
+#   init container يأخذ alertmanager.yml.tmpl من ConfigMap
+#   ويستبدل ${PAGERDUTY_ROUTING_KEY} و ${SLACK_WEBHOOK_URL}
+#   من Secret "alertmanager-secrets" بـ envsubst
+#   ثم يكتب alertmanager.yml النهائي في /etc/alertmanager/
+#
+# هذا النمط يضمن:
+#   ✓ لا أسرار في ConfigMap
+#   ✓ لا أسرار في logs
+#   ✓ يتوافق مع ExternalSecrets / AWS SM
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+        app.kubernetes.io/name: alertmanager
+        app.kubernetes.io/component: monitoring
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        runAsGroup: 65534
+        fsGroup: 65534
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: alertmanager
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: alertmanager
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app: alertmanager
+      volumes:
+        - name: config-tmpl
+          configMap:
+            name: alertmanager-config
+        - name: config-rendered
+          emptyDir: {}
+        - name: alertmanager-data
+          emptyDir: {}
+
+      # ── Init Container: envsubst الأسرار في الـ config template ─────
+      initContainers:
+        - name: config-init
+          image: bhgedigital/envsubst:v1.2.0
+          command:
+            - sh
+            - -c
+            - |
+              envsubst < /tmpl/alertmanager.yml.tmpl > /etc/alertmanager/alertmanager.yml
+              echo "Config rendered successfully"
+          env:
+            - name: PAGERDUTY_ROUTING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: alertmanager-secrets
+                  key: PAGERDUTY_ROUTING_KEY
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: alertmanager-secrets
+                  key: SLACK_WEBHOOK_URL
+          volumeMounts:
+            - name: config-tmpl
+              mountPath: /tmpl
+              readOnly: true
+            - name: config-rendered
+              mountPath: /etc/alertmanager
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --storage.path=/alertmanager
+            - --web.listen-address=:9093
+            - --cluster.listen-address=0.0.0.0:9094
+            # Peer discovery — كلا الـ pods يتحدثان ببعض لـ HA deduplication
+            - --cluster.peer=alertmanager-0.alertmanager-headless.monitoring.svc.cluster.local:9094
+            - --cluster.peer=alertmanager-1.alertmanager-headless.monitoring.svc.cluster.local:9094
+            - --log.level=info
+          ports:
+            - name: http
+              containerPort: 9093
+            - name: cluster
+              containerPort: 9094
+          volumeMounts:
+            - name: config-rendered
+              mountPath: /etc/alertmanager
+              readOnly: true
+            - name: alertmanager-data
+              mountPath: /alertmanager
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
