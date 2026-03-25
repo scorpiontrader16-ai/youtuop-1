@@ -1,0 +1,19 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: hydration
+  namespace: platform
+  labels:
+    app: hydration
+spec:
+  scaleTargetRef:
+    name: hydration
+  minReplicaCount: 1
+  maxReplicaCount: 2
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://victoria-metrics.monitoring.svc.cluster.local:8428
+        metricName: hydration_requests_per_second
+        query: sum(rate(hydration_http_requests_total[2m]))
+        threshold: "50"
