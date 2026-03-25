@@ -1,3 +1,7 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/cert-manager/kustomization.yaml        ║
+# ║  الحالة: 🆕 جديد                                                ║
+# ╚══════════════════════════════════════════════════════════════════╝
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
