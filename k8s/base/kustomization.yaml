@@ -1,8 +1,13 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/kustomization.yaml                     ║
+# ║  الحالة: ✏️ معدل — تم إضافة pgbouncer                           ║
+# ╚══════════════════════════════════════════════════════════════════╝
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - namespaces.yaml
   - namespace-deny-all.yaml
+  # ── Services ──────────────────────────────────────────────────────
   - ingestion
   - auth
   - billing
@@ -18,13 +23,15 @@ resources:
   - tenant-operator
   - processing
   - hydration
+  - sync
+  # ── Infrastructure ────────────────────────────────────────────────
   - cilium
   - chaos
   - external-secrets
   - cert-manager
+  - pgbouncer       # ✏️ مُضاف — M9 Connection Pooling
   - monitoring
   - vault
   - api-gateway
-  - sync
   - kyverno
   - velero
