@@ -1,0 +1,22 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  المسار الكامل: k8s/base/pgbouncer/poddisruptionbudget.yaml     ║
+# ║  الحالة: 🆕 جديد                                                ║
+# ╚══════════════════════════════════════════════════════════════════╝
+---
+# replicas=2 → minAvailable=1 يضمن أن pod واحد على الأقل يعمل أثناء الصيانة
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pgbouncer-pdb
+  namespace: platform
+  labels:
+    app: pgbouncer
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/component: connection-pooler
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: pgbouncer
