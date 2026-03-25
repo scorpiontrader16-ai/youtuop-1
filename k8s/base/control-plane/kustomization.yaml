@@ -11,5 +11,4 @@ resources:
   - poddisruptionbudget.yaml
   - rollout.yaml
   - service.yaml
-  - scaledobject.yaml
   - certificate.yaml
