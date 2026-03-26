@@ -1,0 +1,37 @@
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║  المسار الكامل: services/ingestion/internal/schema/feature_event.proto  ║
+// ║  الحالة: 🆕 جديد                                                        ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+
+syntax = "proto3";
+
+package platform.ingestion.v1;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Go package path يتطابق مع module path الموجود في go.mod
+// option go_package لازم يكون كامل لتجنب أي import conflict
+// ─────────────────────────────────────────────────────────────────────────────
+option go_package = "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/schema;schema";
+
+// FeatureEvent — يُرسَل إلى Redpanda topic "feature-events"
+// يُستهلَك من ML pipeline لـ Online Learning و Feature Store
+message FeatureEvent {
+  // معرّف فريد للحدث — يُنتَج من main.go كـ "evt-{UnixNano}"
+  string event_id = 1;
+
+  // معرّف الـ tenant — مطلوب دائماً (RLS)
+  string tenant_id = 2;
+
+  // نوع مصدر الحدث — من X-Event-Type header
+  string source_type = 3;
+
+  // Feature vector — يُملَأ لاحقاً من ML feature extraction pipeline
+  // فارغ عند الإرسال الأولي من ingestion service
+  repeated double feature_vector = 4;
+
+  // metadata إضافية من الـ request headers
+  map<string, string> metadata = 5;
+
+  // وقت وقوع الحدث — Unix milliseconds (UTC)
+  int64 occurred_at = 6;
+}
