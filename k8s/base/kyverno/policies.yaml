@@ -1,35 +1,67 @@
-# Policy 1 — منع الـ Pods من الشغل كـ root
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Full path: k8s/base/kyverno/policies.yaml                          ║
+# ║  Status: ✏️ Modified — GAP-02 Admission Controllers                  ║
+# ║  Changes vs previous version:                                        ║
+# ║    • require-non-root       → enhanced: +container-level +runAsUser  ║
+# ║    • disallow-latest-tag    → replaced by require-image-digest       ║
+# ║    • disallow-privileged-containers → NEW (cluster-wide)             ║
+# ║    • disallow-host-namespaces       → NEW                            ║
+# ║    • ALL policies: added app.kubernetes.io/* labels                  ║
+# ║    • boolean fix: "false" string → false boolean (privileged/host*)  ║
+# ╚══════════════════════════════════════════════════════════════════════╝
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: require-non-root
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
   annotations:
     policies.kyverno.io/title: Require Non-Root
     policies.kyverno.io/severity: high
     policies.kyverno.io/description: >
-      منع أي Pod من الشغل بصلاحيات root
+      منع أي Pod من الشغل بصلاحيات root — يتحقق على مستوى الـ Pod والـ container معاً
 spec:
   validationFailureAction: Enforce
   background: true
   rules:
-    - name: check-runAsNonRoot
+    - name: check-pod-runAsNonRoot
       match:
         any:
           - resources:
               kinds: [Pod]
               namespaces: [platform]
       validate:
-        message: "يجب أن يشتغل الـ Pod بـ runAsNonRoot: true"
+        message: "يجب أن يشتغل الـ Pod بـ spec.securityContext.runAsNonRoot: true"
         pattern:
           spec:
             securityContext:
               runAsNonRoot: true
+    - name: check-container-runAsNonRoot
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "كل container يجب أن يعمل بـ runAsNonRoot: true وrunAsUser > 0"
+        pattern:
+          spec:
+            =(initContainers):
+              - =(securityContext):
+                  =(runAsNonRoot): true
+            containers:
+              - securityContext:
+                  runAsNonRoot: true
+                  runAsUser: ">0"
 ---
-# Policy 2 — منع privilege escalation
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: disallow-privilege-escalation
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
   annotations:
     policies.kyverno.io/title: Disallow Privilege Escalation
     policies.kyverno.io/severity: high
@@ -53,11 +85,13 @@ spec:
               - securityContext:
                   allowPrivilegeEscalation: false
 ---
-# Policy 3 — إجبار readOnlyRootFilesystem
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: require-readonly-rootfs
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
   annotations:
     policies.kyverno.io/title: Require ReadOnly Root Filesystem
     policies.kyverno.io/severity: medium
@@ -79,11 +113,13 @@ spec:
               - securityContext:
                   readOnlyRootFilesystem: true
 ---
-# Policy 4 — إجبار ARM64 nodeSelector
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: require-arm64-nodeselector
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
   annotations:
     policies.kyverno.io/title: Require ARM64 NodeSelector
     policies.kyverno.io/severity: medium
@@ -104,40 +140,45 @@ spec:
             nodeSelector:
               kubernetes.io/arch: arm64
 ---
-# Policy 5 — منع :latest tag — يسمح بـ SHA digest أو semantic version (v1.2.3)
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: disallow-latest-tag
+  name: require-image-digest
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
   annotations:
-    policies.kyverno.io/title: Disallow Latest Tag
-    policies.kyverno.io/severity: medium
+    policies.kyverno.io/title: Require Image Digest
+    policies.kyverno.io/severity: high
     policies.kyverno.io/description: >
-      يمنع استخدام :latest — يُسمح فقط بـ SHA digest أو semantic version مثل v1.2.3
+      يُلزم بـ SHA digest (@sha256:...) لجميع الصور في namespace platform
 spec:
   validationFailureAction: Enforce
-  background: true
+  background: false
   rules:
-    - name: check-image-tag
+    - name: check-image-digest
       match:
         any:
           - resources:
               kinds: [Pod]
               namespaces: [platform]
       validate:
-        message: "لا يسمح باستخدام :latest — استخدم SHA digest (@sha256:...) أو semantic version (v1.2.3)"
-        deny:
-          conditions:
-            any:
-              - key: "{{ images.containers.*.tag }}"
-                operator: AnyIn
-                value: ["latest", ""]
+        message: "الصور يجب أن تستخدم SHA digest (@sha256:...) — لا يُسمح بـ tags فقط"
+        foreach:
+          - list: "request.object.spec.containers"
+            pattern:
+              image: "*@sha256:*"
+          - list: "request.object.spec.initContainers"
+            pattern:
+              image: "*@sha256:*"
 ---
-# Policy 6 — إجبار resource limits
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: require-resource-limits
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
   annotations:
     policies.kyverno.io/title: Require Resource Limits
     policies.kyverno.io/severity: medium
@@ -164,11 +205,13 @@ spec:
                     cpu: "?*"
                     memory: "?*"
 ---
-# Policy 7 — منع automountServiceAccountToken
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: disallow-automount-sa-token
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
   annotations:
     policies.kyverno.io/title: Disallow Automount SA Token
     policies.kyverno.io/severity: high
@@ -188,11 +231,13 @@ spec:
           spec:
             automountServiceAccountToken: false
 ---
-# Policy 8 — منع capabilities
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
   name: require-drop-all-capabilities
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
   annotations:
     policies.kyverno.io/title: Require Drop All Capabilities
     policies.kyverno.io/severity: high
@@ -215,3 +260,65 @@ spec:
                   capabilities:
                     drop:
                       - ALL
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged-containers
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >
+      يمنع تشغيل privileged containers على مستوى الـ cluster كاملاً
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: privileged-containers
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      validate:
+        message: "Privileged containers غير مسموح بها في أي namespace"
+        pattern:
+          spec:
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): false
+            containers:
+              - =(securityContext):
+                  =(privileged): false
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-host-namespaces
+  labels:
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
+  annotations:
+    policies.kyverno.io/title: Disallow Host Namespaces
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >
+      يمنع مشاركة hostPID وhostIPC وhostNetwork في namespace platform
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: host-namespaces
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [platform]
+      validate:
+        message: "مشاركة host namespaces (hostPID/hostIPC/hostNetwork) غير مسموح بها"
+        pattern:
+          spec:
+            =(hostPID): false
+            =(hostIPC): false
+            =(hostNetwork): false
