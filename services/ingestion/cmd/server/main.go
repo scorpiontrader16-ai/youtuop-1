@@ -1,6 +1,6 @@
 // ╔══════════════════════════════════════════════════════════════════════════╗
 // ║  المسار الكامل: services/ingestion/cmd/server/main.go                   ║
-// ║  الحالة: ✏️ معدل — M2/M4: إضافة FeatureProducer للـ ML Streaming        ║
+// ║  الحالة: ✏️ معدل — إصلاح import: إزالة pb schema، استخدام kafka.FeatureEvent ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 
 package main
@@ -14,7 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings" // ✏️ مُضاف: لـ strings.Split على cfg.RedpandaBrokers
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,11 +37,10 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
-	chwriter "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/clickhouse"
+	chwriter      "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/clickhouse"
 	"github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/coldstore"
-	kafkaclient "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/kafka" // ✏️ مُضاف
+	kafkaclient   "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/kafka"
 	"github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/postgres"
-	pb "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/schema" // ✏️ مُضاف
 	"github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/tiering"
 )
 
@@ -91,7 +90,6 @@ var (
 		Help: "Total number of requests rejected due to missing tenant_id",
 	})
 
-	// ✏️ مُضاف: عداد إرسال الـ feature events للـ ML pipeline
 	featureEventsSentTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "ingestion_feature_events_sent_total",
 		Help: "Total number of feature events sent to ML pipeline",
@@ -162,7 +160,6 @@ func main() {
 	}()
 	otel.SetTracerProvider(tp)
 
-	// ── Shared logger (slog للـ internal packages) ────────────────────────
 	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -170,7 +167,7 @@ func main() {
 	startupCtx, startupCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer startupCancel()
 
-	// ── ClickHouse Buffered Writer (Hot) ──────────────────────────────────
+	// ── ClickHouse ────────────────────────────────────────────────────────
 	chConn, err := chwriter.WaitForClickHouse(startupCtx, chwriter.ConfigFromEnv(), slogLogger)
 	if err != nil {
 		log.Warn("clickhouse unavailable — hot store disabled", zap.Error(err))
@@ -184,7 +181,7 @@ func main() {
 		log.Info("clickhouse hot store ready")
 	}
 
-	// ── Postgres (Warm) ───────────────────────────────────────────────────
+	// ── Postgres ──────────────────────────────────────────────────────────
 	pgClient, err := postgres.WaitForPostgres(startupCtx, postgres.ConfigFromEnv(), slogLogger)
 	if err != nil {
 		log.Warn("postgres unavailable — warm store disabled", zap.Error(err))
@@ -199,7 +196,7 @@ func main() {
 		}
 	}
 
-	// ── Cold Store (S3/MinIO + Parquet) ───────────────────────────────────
+	// ── Cold Store ────────────────────────────────────────────────────────
 	coldWriter, err := coldstore.WaitForColdStore(startupCtx, coldstore.ConfigFromEnv(), slogLogger)
 	if err != nil {
 		log.Warn("coldstore unavailable — cold archival disabled", zap.Error(err))
@@ -207,7 +204,7 @@ func main() {
 		log.Info("coldstore (minio) ready")
 	}
 
-	// ── Tiering Job (Warm → Cold) ─────────────────────────────────────────
+	// ── Tiering Job ───────────────────────────────────────────────────────
 	tieringCtx, tieringCancel := context.WithCancel(context.Background())
 
 	if pgClient != nil && coldWriter != nil {
@@ -224,15 +221,12 @@ func main() {
 
 	limiter := rate.NewLimiter(1000, 100)
 
-	// ── ✏️ Feature Producer (ML Streaming — M2/M4) ────────────────────────
-	// cfg.RedpandaBrokers هو string واحد مثل "redpanda:9092"
-	// strings.Split يدعم multiple brokers مثل "broker1:9092,broker2:9092"
+	// ── Feature Producer (ML Streaming) ───────────────────────────────────
 	featureProducer := kafkaclient.NewFeatureProducer(
 		strings.Split(cfg.RedpandaBrokers, ","),
 		"feature-events",
 		log,
 	)
-	// defer يضمن flush كل الـ pending messages قبل إغلاق البرنامج
 	defer featureProducer.Close()
 
 	// ── gRPC Server ───────────────────────────────────────────────────────
@@ -304,7 +298,8 @@ func main() {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tenantID := r.Header.Get("X-Tenant-ID")
 			if tenantID != "" && pgClient != nil {
-				_, err := pgClient.DB().ExecContext(r.Context(), "SELECT set_config('app.tenant_id', $1, false)", tenantID)
+				_, err := pgClient.DB().ExecContext(r.Context(),
+					"SELECT set_config('app.tenant_id', $1, false)", tenantID)
 				if err != nil {
 					slog.Error("set tenant_id session", "error", err)
 				}
@@ -335,7 +330,6 @@ func main() {
 			return
 		}
 
-		// ── Tenant Validation ─────────────────────────────────────────────
 		tenantID := r.Header.Get("X-Tenant-ID")
 		if tenantID == "" {
 			tenantMissingTotal.Inc()
@@ -353,7 +347,6 @@ func main() {
 			if r.ContentLength > 0 {
 				payloadBytes = uint32(r.ContentLength)
 			}
-
 			row := chwriter.EventRow{
 				EventID:       eventID,
 				EventType:     r.Header.Get("X-Event-Type"),
@@ -371,7 +364,6 @@ func main() {
 				MetaKeys:      []string{},
 				MetaValues:    []string{},
 			}
-
 			if !bufWriter.Enqueue(row) {
 				eventsDroppedTotal.Inc()
 			}
@@ -379,21 +371,17 @@ func main() {
 
 		eventsProcessedTotal.Inc()
 
-		// ── ✏️ ML Streaming — إرسال FeatureEvent إلى Redpanda (non-blocking) ─
-		// goroutine منفصلة تماماً لضمان أن latency الـ ML لا تؤثر على الـ hot path
-		// timeout = 2s لمنع تراكم goroutines عند بطء Redpanda
-		// المتغيرات تُنسخ بالقيمة قبل إطلاق الـ goroutine (لا race conditions)
+		// ── ML Streaming — non-blocking goroutine ─────────────────────────
+		// المتغيرات تُنسخ بالقيمة قبل إطلاق الـ goroutine — لا race conditions
 		go func(eID, tID, srcType string, ts int64) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
-			evt := &pb.FeatureEvent{
-				EventId:    eID,
-				TenantId:   tID,
+			evt := &kafkaclient.FeatureEvent{
+				EventID:    eID,
+				TenantID:   tID,
 				SourceType: srcType,
 				OccurredAt: ts,
-				// feature_vector فارغ — يُملَأ لاحقاً من ML feature extraction
-				// metadata فارغ — يُضاف لاحقاً حسب الحاجة
 			}
 
 			if sendErr := featureProducer.SendFeatureEvent(ctx, evt); sendErr != nil {
@@ -409,7 +397,6 @@ func main() {
 		}(eventID, tenantID, r.Header.Get("X-Event-Type"), now.UnixMilli())
 
 		httpRequestsTotal.WithLabelValues(r.Method, path, "200").Inc()
-
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, `{"event_id":%q,"tenant_id":%q,"accepted":true}`, eventID, tenantID)
@@ -449,38 +436,27 @@ func main() {
 
 	log.Info("shutting down gracefully...", zap.String("signal", sig.String()))
 
-	// 1. أوقف الـ tiering job أولاً
 	tieringCancel()
 
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutCancel()
 
-	// 2. أعلم الـ health check إن الـ service بيوقف
 	healthSrv.SetServingStatus("", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
-
-	// 3. أوقف الـ gRPC server بشكل آمن
 	grpcServer.GracefulStop()
 
-	// 4. أوقف الـ HTTP server
 	if shutErr := httpServer.Shutdown(shutCtx); shutErr != nil {
 		log.Error("HTTP shutdown error", zap.Error(shutErr))
 	}
 
-	// 5. featureProducer.Close() يُستدعى تلقائياً عبر defer أعلاه
-	//    يضمن flush كل الـ pending feature events قبل الخروج
-
+	// featureProducer.Close() يُستدعى تلقائياً عبر defer
 	log.Info("shutdown complete")
 }
 
 // ── Tenant Interceptor ────────────────────────────────────────────────────
 
 func tenantInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
-	return func(
-		ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (interface{}, error) {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler) (interface{}, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
 			tenantMissingTotal.Inc()
@@ -489,9 +465,7 @@ func tenantInterceptor(log *zap.Logger) grpc.UnaryServerInterceptor {
 		vals := md.Get("x-tenant-id")
 		if len(vals) == 0 || vals[0] == "" {
 			tenantMissingTotal.Inc()
-			log.Warn("gRPC call missing x-tenant-id",
-				zap.String("method", info.FullMethod),
-			)
+			log.Warn("gRPC call missing x-tenant-id", zap.String("method", info.FullMethod))
 			return nil, ErrMissingTenant
 		}
 		ctx = context.WithValue(ctx, contextKeyTenantID{}, vals[0])
@@ -509,12 +483,8 @@ func TenantIDFromContext(ctx context.Context) (string, bool) {
 // ── Rate Limit Interceptor ────────────────────────────────────────────────
 
 func rateLimitInterceptor(limiter *rate.Limiter, log *zap.Logger) grpc.UnaryServerInterceptor {
-	return func(
-		ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (interface{}, error) {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler) (interface{}, error) {
 		if !limiter.Allow() {
 			rateLimitRejectedTotal.Inc()
 			log.Warn("gRPC rate limit exceeded", zap.String("method", info.FullMethod))
