@@ -1,5 +1,10 @@
 package main
 
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  services/auth/cmd/server/main.go                               ║
+// ║  Status: ✏️ Modified — M8: Agent Identity routes added          ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
 import (
 	"context"
 	"crypto/rand"
@@ -166,11 +171,13 @@ func main() {
 	bruteForce := middleware.NewBruteForceProtection(pgClient)
 
 	// ── Handlers ───────────────────────────────────────────────────────────
-	mfaHandler := handlers.NewMFAHandler(pgClient, twilioClient, smsFrom, log)
-	sessionHandler := handlers.NewSessionHandler(pgClient, log)
-	apiKeyHandler := handlers.NewAPIKeyHandler(pgClient, log)
-	recoveryHandler := handlers.NewRecoveryHandler(pgClient, nil, log) // nil notifier for now
+	mfaHandler      := handlers.NewMFAHandler(pgClient, twilioClient, smsFrom, log)
+	sessionHandler  := handlers.NewSessionHandler(pgClient, log)
+	apiKeyHandler   := handlers.NewAPIKeyHandler(pgClient, log)
+	recoveryHandler := handlers.NewRecoveryHandler(pgClient, nil, log)
 	registerHandler := handlers.NewRegisterHandler(pgClient, log)
+	// ── M8: Agent Identity ─────────────────────────────────────────────────
+	agentHandler := handlers.NewAgentHandler(pgClient, log)
 
 	// ── HTTP Router ────────────────────────────────────────────────────────
 	mux := http.NewServeMux()
@@ -181,7 +188,6 @@ func main() {
 		fmt.Fprint(w, "ok")
 	})
 
-	// ── FIX #1: pgxpool.Pool does not have PingContext — use Ping(ctx) ────
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
@@ -197,7 +203,7 @@ func main() {
 		fmt.Fprint(w, "ready")
 	})
 
-	// JWKS endpoint (public keys for token verification)
+	// JWKS endpoint
 	mux.HandleFunc("GET /.well-known/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
 		jwks, err := jwtSvc.JWKS()
 		if err != nil {
@@ -209,40 +215,41 @@ func main() {
 		w.Write(jwks) //nolint:errcheck
 	})
 
-	// ── Existing login with Keycloak (SSO) ────────────────────────────────
-	mux.Handle("POST /v1/auth/login", deviceMiddleware(http.HandlerFunc(makeLoginHandler(cfg, pgClient, jwtSvc, rbacEngine, log))))
-
-	// ── New email/password login ──────────────────────────────────────────
+	// ── Auth ──────────────────────────────────────────────────────────────
+	mux.Handle("POST /v1/auth/login",          deviceMiddleware(http.HandlerFunc(makeLoginHandler(cfg, pgClient, jwtSvc, rbacEngine, log))))
 	mux.Handle("POST /v1/auth/login/password", deviceMiddleware(http.HandlerFunc(makePasswordLoginHandler(pgClient, jwtSvc, rbacEngine, bruteForce, log))))
+	mux.HandleFunc("POST /v1/auth/refresh",    makeRefreshHandler(pgClient, jwtSvc, rbacEngine, log))
+	mux.Handle("POST /v1/auth/logout",         deviceMiddleware(http.HandlerFunc(makeLogoutHandler(pgClient, jwtSvc, log))))
 
-	// ── Refresh & logout ──────────────────────────────────────────────────
-	mux.HandleFunc("POST /v1/auth/refresh", makeRefreshHandler(pgClient, jwtSvc, rbacEngine, log))
-	mux.Handle("POST /v1/auth/logout", deviceMiddleware(http.HandlerFunc(makeLogoutHandler(pgClient, jwtSvc, log))))
-
-	// ── MFA endpoints ──────────────────────────────────────────────────────
+	// ── MFA ───────────────────────────────────────────────────────────────
 	mux.Handle("POST /v1/auth/mfa/totp/generate", deviceMiddleware(http.HandlerFunc(mfaHandler.GenerateTOTP)))
-	mux.Handle("POST /v1/auth/mfa/totp/verify", deviceMiddleware(http.HandlerFunc(mfaHandler.VerifyTOTP)))
-	mux.Handle("DELETE /v1/auth/mfa/totp", deviceMiddleware(http.HandlerFunc(mfaHandler.DisableMFA)))
-	mux.Handle("POST /v1/auth/mfa/sms/send", deviceMiddleware(http.HandlerFunc(mfaHandler.SendSMS)))
-	mux.Handle("POST /v1/auth/mfa/sms/verify", deviceMiddleware(http.HandlerFunc(mfaHandler.VerifySMS)))
+	mux.Handle("POST /v1/auth/mfa/totp/verify",   deviceMiddleware(http.HandlerFunc(mfaHandler.VerifyTOTP)))
+	mux.Handle("DELETE /v1/auth/mfa/totp",         deviceMiddleware(http.HandlerFunc(mfaHandler.DisableMFA)))
+	mux.Handle("POST /v1/auth/mfa/sms/send",       deviceMiddleware(http.HandlerFunc(mfaHandler.SendSMS)))
+	mux.Handle("POST /v1/auth/mfa/sms/verify",     deviceMiddleware(http.HandlerFunc(mfaHandler.VerifySMS)))
 
-	// ── Session management ────────────────────────────────────────────────
-	mux.Handle("GET /v1/auth/sessions", deviceMiddleware(http.HandlerFunc(sessionHandler.List)))
-	mux.Handle("DELETE /v1/auth/sessions/{session_id}", deviceMiddleware(http.HandlerFunc(sessionHandler.Revoke)))
-	mux.Handle("POST /v1/auth/sessions/revoke-all", deviceMiddleware(http.HandlerFunc(sessionHandler.RevokeAll)))
+	// ── Sessions ──────────────────────────────────────────────────────────
+	mux.Handle("GET /v1/auth/sessions",                       deviceMiddleware(http.HandlerFunc(sessionHandler.List)))
+	mux.Handle("DELETE /v1/auth/sessions/{session_id}",       deviceMiddleware(http.HandlerFunc(sessionHandler.Revoke)))
+	mux.Handle("POST /v1/auth/sessions/revoke-all",           deviceMiddleware(http.HandlerFunc(sessionHandler.RevokeAll)))
 
 	// ── API Keys ──────────────────────────────────────────────────────────
-	mux.Handle("POST /v1/auth/api-keys", deviceMiddleware(http.HandlerFunc(apiKeyHandler.Create)))
-	mux.Handle("GET /v1/auth/api-keys", deviceMiddleware(http.HandlerFunc(apiKeyHandler.List)))
-	mux.Handle("DELETE /v1/auth/api-keys/{key_id}", deviceMiddleware(http.HandlerFunc(apiKeyHandler.Revoke)))
-	mux.HandleFunc("POST /v1/auth/internal/api-keys/verify", apiKeyHandler.VerifyInternal) // no middleware (internal)
+	mux.Handle("POST /v1/auth/api-keys",              deviceMiddleware(http.HandlerFunc(apiKeyHandler.Create)))
+	mux.Handle("GET /v1/auth/api-keys",               deviceMiddleware(http.HandlerFunc(apiKeyHandler.List)))
+	mux.Handle("DELETE /v1/auth/api-keys/{key_id}",   deviceMiddleware(http.HandlerFunc(apiKeyHandler.Revoke)))
+	mux.HandleFunc("POST /v1/auth/internal/api-keys/verify", apiKeyHandler.VerifyInternal)
 
-	// ── Account recovery ──────────────────────────────────────────────────
+	// ── Account Recovery ──────────────────────────────────────────────────
 	mux.HandleFunc("POST /v1/auth/recovery/request", recoveryHandler.RequestReset)
-	mux.HandleFunc("POST /v1/auth/recovery/reset", recoveryHandler.ResetPassword)
+	mux.HandleFunc("POST /v1/auth/recovery/reset",   recoveryHandler.ResetPassword)
 
 	// ── Registration ──────────────────────────────────────────────────────
 	mux.Handle("POST /v1/auth/register", deviceMiddleware(http.HandlerFunc(registerHandler.Register)))
+
+	// ── M8: Agent Identity ────────────────────────────────────────────────
+	mux.Handle("POST /v1/auth/agents",                    deviceMiddleware(http.HandlerFunc(agentHandler.CreateAgent)))
+	mux.Handle("GET /v1/auth/agents",                     deviceMiddleware(http.HandlerFunc(agentHandler.ListAgents)))
+	mux.Handle("DELETE /v1/auth/agents/{agent_id}",       deviceMiddleware(http.HandlerFunc(agentHandler.SuspendAgent)))
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
@@ -272,7 +279,7 @@ func main() {
 	log.Info("shutdown complete")
 }
 
-// ── Handlers ──────────────────────────────────────────────────────────────
+// ── Login handlers (unchanged) ────────────────────────────────────────────
 
 type loginRequest struct {
 	Code        string `json:"code"`
@@ -300,32 +307,21 @@ type keycloakUserInfo struct {
 	Picture    string `json:"picture"`
 }
 
-func makeLoginHandler(
-	cfg Config,
-	pg *postgres.Client,
-	jwtSvc *appjwt.Service,
-	rbacEngine *rbac.Engine,
-	log *zap.Logger,
-) http.HandlerFunc {
+func makeLoginHandler(cfg Config, pg *postgres.Client, jwtSvc *appjwt.Service, rbacEngine *rbac.Engine, log *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
 		var req loginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			loginTotal.WithLabelValues("bad_request").Inc()
 			jsonError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-
-		// 1. Resolve tenant
 		tenant, err := pg.GetTenantBySlug(ctx, req.TenantSlug)
 		if err != nil {
 			loginTotal.WithLabelValues("tenant_not_found").Inc()
 			jsonError(w, "tenant not found", http.StatusForbidden)
 			return
 		}
-
-		// 2. Exchange code with Keycloak
 		kcTokens, err := exchangeCode(ctx, cfg, req.Code, req.RedirectURI)
 		if err != nil {
 			log.Warn("keycloak exchange failed", zap.Error(err))
@@ -333,8 +329,6 @@ func makeLoginHandler(
 			jsonError(w, "authentication failed", http.StatusUnauthorized)
 			return
 		}
-
-		// 3. Get user info
 		kcUser, err := getKeycloakUserInfo(ctx, cfg, kcTokens.AccessToken)
 		if err != nil {
 			log.Warn("keycloak userinfo failed", zap.Error(err))
@@ -342,20 +336,13 @@ func makeLoginHandler(
 			jsonError(w, "failed to get user info", http.StatusUnauthorized)
 			return
 		}
-
-		// 4. Upsert user
-		user, err := pg.UpsertByKeycloakID(ctx,
-			kcUser.Sub, kcUser.Email,
-			kcUser.GivenName, kcUser.FamilyName, kcUser.Picture,
-		)
+		user, err := pg.UpsertByKeycloakID(ctx, kcUser.Sub, kcUser.Email, kcUser.GivenName, kcUser.FamilyName, kcUser.Picture)
 		if err != nil {
 			log.Error("upsert user failed", zap.Error(err))
 			loginTotal.WithLabelValues("db_error").Inc()
 			jsonError(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-
-		// 5. Get or assign role
 		role, err := pg.GetUserRole(ctx, user.ID, tenant.ID)
 		if err != nil {
 			role = "viewer"
@@ -363,81 +350,38 @@ func makeLoginHandler(
 				log.Warn("assign default role failed", zap.Error(assignErr))
 			}
 		}
-
-		// 6. Load permissions (role + plan)
 		perms, err := rbacEngine.GetPermissions(ctx, user.ID, tenant.ID, tenant.Plan)
 		if err != nil {
 			log.Error("load permissions failed", zap.Error(err))
 			perms = []string{}
 		}
-
-		// 7. Create session
 		fingerprint := r.Context().Value(middleware.DeviceFingerprintKey).(string)
-		sessionID, err := pg.CreateSession(ctx,
-			user.ID, tenant.ID,
-			fingerprint,
-			r.RemoteAddr,
-			r.Header.Get("User-Agent"),
-			time.Now().Add(appjwt.RefreshTokenTTL),
-		)
+		sessionID, err := pg.CreateSession(ctx, user.ID, tenant.ID, fingerprint, r.RemoteAddr, r.Header.Get("User-Agent"), time.Now().Add(appjwt.RefreshTokenTTL))
 		if err != nil {
 			log.Error("create session failed", zap.Error(err))
 			jsonError(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-
-		// 8. Issue youtuop JWT
-		token, err := jwtSvc.IssueAccessToken(appjwt.IssueInput{
-			UserID:      user.ID,
-			Email:       user.Email,
-			SessionID:   sessionID,
-			TenantID:    tenant.ID,
-			TenantSlug:  tenant.Slug,
-			Plan:        tenant.Plan,
-			Role:        role,
-			Permissions: perms,
-		})
+		token, err := jwtSvc.IssueAccessToken(appjwt.IssueInput{UserID: user.ID, Email: user.Email, SessionID: sessionID, TenantID: tenant.ID, TenantSlug: tenant.Slug, Plan: tenant.Plan, Role: role, Permissions: perms})
 		if err != nil {
 			log.Error("JWT issuance failed", zap.Error(err))
 			jsonError(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-
-		// 9. Store refresh token (hashed)
 		rawRefresh := generateToken()
-		if storeErr := pg.StoreRefreshToken(ctx, sessionID,
-			postgres.HashToken(rawRefresh),
-			time.Now().Add(appjwt.RefreshTokenTTL),
-		); storeErr != nil {
+		if storeErr := pg.StoreRefreshToken(ctx, sessionID, postgres.HashToken(rawRefresh), time.Now().Add(appjwt.RefreshTokenTTL)); storeErr != nil {
 			log.Warn("store refresh token failed", zap.Error(storeErr))
 		}
-
 		loginTotal.WithLabelValues("success").Inc()
 		tokenIssued.Inc()
-		log.Info("user logged in",
-			zap.String("user_id", user.ID),
-			zap.String("tenant", tenant.Slug),
-			zap.String("role", role),
-		)
-
-		jsonOK(w, tokenResponse{
-			AccessToken:  token,
-			RefreshToken: rawRefresh,
-			ExpiresIn:    int(appjwt.AccessTokenTTL.Seconds()),
-			TokenType:    "Bearer",
-		})
+		log.Info("user logged in", zap.String("user_id", user.ID), zap.String("tenant", tenant.Slug), zap.String("role", role))
+		jsonOK(w, tokenResponse{AccessToken: token, RefreshToken: rawRefresh, ExpiresIn: int(appjwt.AccessTokenTTL.Seconds()), TokenType: "Bearer"})
 	}
 }
 
-func makeRefreshHandler(
-	pg *postgres.Client,
-	jwtSvc *appjwt.Service,
-	rbacEngine *rbac.Engine,
-	log *zap.Logger,
-) http.HandlerFunc {
+func makeRefreshHandler(pg *postgres.Client, jwtSvc *appjwt.Service, rbacEngine *rbac.Engine, log *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
 		var body struct {
 			RefreshToken string `json:"refresh_token"`
 		}
@@ -449,86 +393,50 @@ func makeRefreshHandler(
 			jsonError(w, "refresh_token is required", http.StatusBadRequest)
 			return
 		}
-
 		sessionID, err := pg.ConsumeRefreshToken(ctx, postgres.HashToken(body.RefreshToken))
 		if err != nil {
 			log.Warn("refresh token invalid or already used", zap.Error(err))
 			jsonError(w, "invalid or expired refresh token", http.StatusUnauthorized)
 			return
 		}
-
 		session, err := pg.GetSessionByID(ctx, sessionID)
 		if err != nil {
 			log.Warn("session not found or expired", zap.String("session_id", sessionID))
 			jsonError(w, "session expired, please login again", http.StatusUnauthorized)
 			return
 		}
-
 		user, err := pg.GetUserByID(ctx, session.UserID)
 		if err != nil {
 			log.Error("user not found for session", zap.String("user_id", session.UserID))
 			jsonError(w, "user not found", http.StatusUnauthorized)
 			return
 		}
-
 		tenant, err := pg.GetTenantByID(ctx, session.TenantID)
 		if err != nil {
 			log.Error("tenant not found for session", zap.String("tenant_id", session.TenantID))
 			jsonError(w, "tenant not found", http.StatusForbidden)
 			return
 		}
-
 		role, err := pg.GetUserRole(ctx, user.ID, tenant.ID)
 		if err != nil {
-			log.Warn("role not found, defaulting to viewer",
-				zap.String("user_id", user.ID),
-				zap.String("tenant_id", tenant.ID),
-			)
 			role = "viewer"
 		}
-
 		perms, err := rbacEngine.GetPermissions(ctx, user.ID, tenant.ID, tenant.Plan)
 		if err != nil {
-			log.Error("load permissions failed", zap.Error(err))
 			perms = []string{}
 		}
-
-		newToken, err := jwtSvc.IssueAccessToken(appjwt.IssueInput{
-			UserID:      user.ID,
-			Email:       user.Email,
-			SessionID:   session.ID,
-			TenantID:    tenant.ID,
-			TenantSlug:  tenant.Slug,
-			Plan:        tenant.Plan,
-			Role:        role,
-			Permissions: perms,
-		})
+		newToken, err := jwtSvc.IssueAccessToken(appjwt.IssueInput{UserID: user.ID, Email: user.Email, SessionID: session.ID, TenantID: tenant.ID, TenantSlug: tenant.Slug, Plan: tenant.Plan, Role: role, Permissions: perms})
 		if err != nil {
 			log.Error("JWT issuance failed", zap.Error(err))
 			jsonError(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-
 		newRawRefresh := generateToken()
-		if storeErr := pg.StoreRefreshToken(ctx, session.ID,
-			postgres.HashToken(newRawRefresh),
-			time.Now().Add(appjwt.RefreshTokenTTL),
-		); storeErr != nil {
+		if storeErr := pg.StoreRefreshToken(ctx, session.ID, postgres.HashToken(newRawRefresh), time.Now().Add(appjwt.RefreshTokenTTL)); storeErr != nil {
 			log.Warn("store new refresh token failed", zap.Error(storeErr))
 		}
-
 		tokenIssued.Inc()
-		log.Info("token refreshed",
-			zap.String("user_id", user.ID),
-			zap.String("tenant", tenant.Slug),
-		)
-
-		jsonOK(w, tokenResponse{
-			AccessToken:  newToken,
-			RefreshToken: newRawRefresh,
-			ExpiresIn:    int(appjwt.AccessTokenTTL.Seconds()),
-			TokenType:    "Bearer",
-		})
+		jsonOK(w, tokenResponse{AccessToken: newToken, RefreshToken: newRawRefresh, ExpiresIn: int(appjwt.AccessTokenTTL.Seconds()), TokenType: "Bearer"})
 	}
 }
 
@@ -551,16 +459,9 @@ func makeLogoutHandler(pg *postgres.Client, jwtSvc *appjwt.Service, log *zap.Log
 	}
 }
 
-func makePasswordLoginHandler(
-	pg *postgres.Client,
-	jwtSvc *appjwt.Service,
-	rbacEngine *rbac.Engine,
-	bruteForce *middleware.BruteForceProtection,
-	log *zap.Logger,
-) http.HandlerFunc {
+func makePasswordLoginHandler(pg *postgres.Client, jwtSvc *appjwt.Service, rbacEngine *rbac.Engine, bruteForce *middleware.BruteForceProtection, log *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-
 		var req struct {
 			Email      string `json:"email"`
 			Password   string `json:"password"`
@@ -570,21 +471,17 @@ func makePasswordLoginHandler(
 			jsonError(w, "invalid request", http.StatusBadRequest)
 			return
 		}
-
 		tenant, err := pg.GetTenantBySlug(ctx, req.TenantSlug)
 		if err != nil {
 			jsonError(w, "tenant not found", http.StatusForbidden)
 			return
 		}
-
 		user, err := pg.GetUserByEmail(ctx, req.Email)
 		if err != nil {
-			// Record failed attempt without user ID (IP only)
 			bruteForce.CheckAndRecord(ctx, "", r.RemoteAddr)
 			jsonError(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
-
 		ok, err := bruteForce.CheckAndRecord(ctx, user.ID, r.RemoteAddr)
 		if err != nil {
 			log.Error("brute force check", zap.Error(err))
@@ -593,120 +490,81 @@ func makePasswordLoginHandler(
 			jsonError(w, "too many attempts, try later", http.StatusTooManyRequests)
 			return
 		}
-
-		// ── FIX #2: bcrypt.CompareHashAndPassword returns error not bool ──
 		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 			jsonError(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
-
 		role, err := pg.GetUserRole(ctx, user.ID, tenant.ID)
 		if err != nil {
 			role = "viewer"
 		}
-
 		perms, err := rbacEngine.GetPermissions(ctx, user.ID, tenant.ID, tenant.Plan)
 		if err != nil {
 			perms = []string{}
 		}
-
 		fingerprint := r.Context().Value(middleware.DeviceFingerprintKey).(string)
-		sessionID, err := pg.CreateSession(ctx,
-			user.ID, tenant.ID,
-			fingerprint,
-			r.RemoteAddr,
-			r.Header.Get("User-Agent"),
-			time.Now().Add(appjwt.RefreshTokenTTL),
-		)
+		sessionID, err := pg.CreateSession(ctx, user.ID, tenant.ID, fingerprint, r.RemoteAddr, r.Header.Get("User-Agent"), time.Now().Add(appjwt.RefreshTokenTTL))
 		if err != nil {
 			log.Error("create session", zap.Error(err))
 			jsonError(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-
-		token, err := jwtSvc.IssueAccessToken(appjwt.IssueInput{
-			UserID:      user.ID,
-			Email:       user.Email,
-			SessionID:   sessionID,
-			TenantID:    tenant.ID,
-			TenantSlug:  tenant.Slug,
-			Plan:        tenant.Plan,
-			Role:        role,
-			Permissions: perms,
-		})
+		token, err := jwtSvc.IssueAccessToken(appjwt.IssueInput{UserID: user.ID, Email: user.Email, SessionID: sessionID, TenantID: tenant.ID, TenantSlug: tenant.Slug, Plan: tenant.Plan, Role: role, Permissions: perms})
 		if err != nil {
 			log.Error("JWT issuance", zap.Error(err))
 			jsonError(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-
 		rawRefresh := generateToken()
 		if err := pg.StoreRefreshToken(ctx, sessionID, postgres.HashToken(rawRefresh), time.Now().Add(appjwt.RefreshTokenTTL)); err != nil {
 			log.Warn("store refresh token", zap.Error(err))
 		}
-
 		loginTotal.WithLabelValues("success").Inc()
 		tokenIssued.Inc()
-
-		jsonOK(w, tokenResponse{
-			AccessToken:  token,
-			RefreshToken: rawRefresh,
-			ExpiresIn:    int(appjwt.AccessTokenTTL.Seconds()),
-			TokenType:    "Bearer",
-		})
+		jsonOK(w, tokenResponse{AccessToken: token, RefreshToken: rawRefresh, ExpiresIn: int(appjwt.AccessTokenTTL.Seconds()), TokenType: "Bearer"})
 	}
 }
 
 // ── Keycloak helpers ──────────────────────────────────────────────────────
 
 func exchangeCode(ctx context.Context, cfg Config, code, redirectURI string) (*keycloakTokens, error) {
-	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token",
-		cfg.KeycloakURL, cfg.KeycloakRealm)
-
+	tokenURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/token", cfg.KeycloakURL, cfg.KeycloakRealm)
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("client_id", cfg.KeycloakClientID)
 	data.Set("client_secret", os.Getenv("KEYCLOAK_CLIENT_SECRET"))
 	data.Set("code", code)
 	data.Set("redirect_uri", redirectURI)
-
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("keycloak request: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("keycloak %d: %s", resp.StatusCode, string(body))
 	}
-
 	var tokens keycloakTokens
 	return &tokens, json.NewDecoder(resp.Body).Decode(&tokens)
 }
 
 func getKeycloakUserInfo(ctx context.Context, cfg Config, accessToken string) (*keycloakUserInfo, error) {
-	userInfoURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/userinfo",
-		cfg.KeycloakURL, cfg.KeycloakRealm)
-
+	userInfoURL := fmt.Sprintf("%s/realms/%s/protocol/openid-connect/userinfo", cfg.KeycloakURL, cfg.KeycloakRealm)
 	req, err := http.NewRequestWithContext(ctx, "GET", userInfoURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
 	var u keycloakUserInfo
 	return &u, json.NewDecoder(resp.Body).Decode(&u)
 }
@@ -717,8 +575,7 @@ func withMetrics(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		next.ServeHTTP(w, r)
-		httpRequestDuration.WithLabelValues(r.Method, r.URL.Path).
-			Observe(time.Since(start).Seconds())
+		httpRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(time.Since(start).Seconds())
 	})
 }
 
@@ -740,17 +597,11 @@ func generateToken() string {
 }
 
 func initTracer(endpoint string) (*sdktrace.TracerProvider, error) {
-	exp, err := otlptracegrpc.New(context.Background(),
-		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithInsecure(),
-	)
+	exp, err := otlptracegrpc.New(context.Background(), otlptracegrpc.WithEndpoint(endpoint), otlptracegrpc.WithInsecure())
 	if err != nil {
 		return nil, err
 	}
-	return sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exp),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-	), nil
+	return sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp), sdktrace.WithSampler(sdktrace.AlwaysSample())), nil
 }
 
 func getEnv(key, fallback string) string {
