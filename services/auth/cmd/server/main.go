@@ -1,9 +1,9 @@
-package main
-
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  services/auth/cmd/server/main.go                               ║
-// ║  Status: ✏️ Modified — M8: Agent Identity routes added          ║
+// ║  Full path: services/auth/cmd/server/main.go                    ║
+// ║  Status: ✏️ Modified — M5: Crypto Agility JWT init              ║
 // ╚══════════════════════════════════════════════════════════════════╝
+
+package main
 
 import (
 	"context"
@@ -63,14 +63,19 @@ var (
 
 // ── Config ────────────────────────────────────────────────────────────────
 
+// JWTPrivateKeyPath حُذف — الـ JWT config يُقرأ من البيئة عبر LoadCryptoConfig()
+// المتغيرات المطلوبة في الـ environment:
+//
+//	JWT_ALGORITHM        = RS256 (default) | ES256
+//	JWT_PRIVATE_KEY_PATH = path to PEM file
+//	JWT_KEY_ID           = key identifier for JWKS (default: "v1")
 type Config struct {
-	HTTPPort          int
-	OTLPEndpoint      string
-	KeycloakURL       string
-	KeycloakRealm     string
-	KeycloakClientID  string
-	JWTIssuer         string
-	JWTPrivateKeyPath string
+	HTTPPort         int
+	OTLPEndpoint     string
+	KeycloakURL      string
+	KeycloakRealm    string
+	KeycloakClientID string
+	JWTIssuer        string
 }
 
 func loadConfig() (Config, error) {
@@ -79,13 +84,12 @@ func loadConfig() (Config, error) {
 		return Config{}, fmt.Errorf("HTTP_PORT: %w", err)
 	}
 	return Config{
-		HTTPPort:          httpPort,
-		OTLPEndpoint:      getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
-		KeycloakURL:       getEnv("KEYCLOAK_URL", "http://keycloak:8080"),
-		KeycloakRealm:     getEnv("KEYCLOAK_REALM", "youtuop"),
-		KeycloakClientID:  getEnv("KEYCLOAK_CLIENT_ID", "youtuop-backend"),
-		JWTIssuer:         getEnv("JWT_ISSUER", "https://auth.youtuop-1.com"),
-		JWTPrivateKeyPath: getEnv("JWT_PRIVATE_KEY_PATH", "/secrets/jwt/private.pem"),
+		HTTPPort:         httpPort,
+		OTLPEndpoint:     getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
+		KeycloakURL:      getEnv("KEYCLOAK_URL", "http://keycloak:8080"),
+		KeycloakRealm:    getEnv("KEYCLOAK_REALM", "youtuop"),
+		KeycloakClientID: getEnv("KEYCLOAK_CLIENT_ID", "youtuop-backend"),
+		JWTIssuer:        getEnv("JWT_ISSUER", "https://auth.youtuop-1.com"),
 	}, nil
 }
 
@@ -143,18 +147,21 @@ func main() {
 		log.Fatal("redis unavailable", zap.Error(err))
 	}
 
-	// ── JWT Service ────────────────────────────────────────────────────────
-	privateKeyPEM, err := os.ReadFile(cfg.JWTPrivateKeyPath)
+	// ── JWT Service — M5 Crypto Agility ───────────────────────────────────
+	// يقرأ JWT_ALGORITHM + JWT_PRIVATE_KEY_PATH + JWT_KEY_ID من البيئة
+	// يدعم RS256 و ES256 بدون أي تغيير في الكود
+	cryptoCfg, err := appjwt.LoadCryptoConfig()
 	if err != nil {
-		log.Fatal("reading JWT private key",
-			zap.Error(err),
-			zap.String("path", cfg.JWTPrivateKeyPath),
-		)
+		log.Fatal("loading crypto config", zap.Error(err))
 	}
-	jwtSvc, err := appjwt.NewService(privateKeyPEM, cfg.JWTIssuer)
+	jwtSvc, err := appjwt.NewServiceFromConfig(cryptoCfg, cfg.JWTIssuer)
 	if err != nil {
 		log.Fatal("creating JWT service", zap.Error(err))
 	}
+	log.Info("JWT service initialized",
+		zap.String("algorithm", string(cryptoCfg.Algorithm)),
+		zap.String("key_id", cryptoCfg.KeyID),
+	)
 
 	// ── RBAC Engine ────────────────────────────────────────────────────────
 	rbacEngine := rbac.NewEngine(pgClient, rdb)
@@ -176,8 +183,7 @@ func main() {
 	apiKeyHandler   := handlers.NewAPIKeyHandler(pgClient, log)
 	recoveryHandler := handlers.NewRecoveryHandler(pgClient, nil, log)
 	registerHandler := handlers.NewRegisterHandler(pgClient, log)
-	// ── M8: Agent Identity ─────────────────────────────────────────────────
-	agentHandler := handlers.NewAgentHandler(pgClient, log)
+	agentHandler    := handlers.NewAgentHandler(pgClient, log)
 
 	// ── HTTP Router ────────────────────────────────────────────────────────
 	mux := http.NewServeMux()
@@ -224,19 +230,19 @@ func main() {
 	// ── MFA ───────────────────────────────────────────────────────────────
 	mux.Handle("POST /v1/auth/mfa/totp/generate", deviceMiddleware(http.HandlerFunc(mfaHandler.GenerateTOTP)))
 	mux.Handle("POST /v1/auth/mfa/totp/verify",   deviceMiddleware(http.HandlerFunc(mfaHandler.VerifyTOTP)))
-	mux.Handle("DELETE /v1/auth/mfa/totp",         deviceMiddleware(http.HandlerFunc(mfaHandler.DisableMFA)))
-	mux.Handle("POST /v1/auth/mfa/sms/send",       deviceMiddleware(http.HandlerFunc(mfaHandler.SendSMS)))
-	mux.Handle("POST /v1/auth/mfa/sms/verify",     deviceMiddleware(http.HandlerFunc(mfaHandler.VerifySMS)))
+	mux.Handle("DELETE /v1/auth/mfa/totp",        deviceMiddleware(http.HandlerFunc(mfaHandler.DisableMFA)))
+	mux.Handle("POST /v1/auth/mfa/sms/send",      deviceMiddleware(http.HandlerFunc(mfaHandler.SendSMS)))
+	mux.Handle("POST /v1/auth/mfa/sms/verify",    deviceMiddleware(http.HandlerFunc(mfaHandler.VerifySMS)))
 
 	// ── Sessions ──────────────────────────────────────────────────────────
-	mux.Handle("GET /v1/auth/sessions",                       deviceMiddleware(http.HandlerFunc(sessionHandler.List)))
-	mux.Handle("DELETE /v1/auth/sessions/{session_id}",       deviceMiddleware(http.HandlerFunc(sessionHandler.Revoke)))
-	mux.Handle("POST /v1/auth/sessions/revoke-all",           deviceMiddleware(http.HandlerFunc(sessionHandler.RevokeAll)))
+	mux.Handle("GET /v1/auth/sessions",                 deviceMiddleware(http.HandlerFunc(sessionHandler.List)))
+	mux.Handle("DELETE /v1/auth/sessions/{session_id}", deviceMiddleware(http.HandlerFunc(sessionHandler.Revoke)))
+	mux.Handle("POST /v1/auth/sessions/revoke-all",     deviceMiddleware(http.HandlerFunc(sessionHandler.RevokeAll)))
 
 	// ── API Keys ──────────────────────────────────────────────────────────
-	mux.Handle("POST /v1/auth/api-keys",              deviceMiddleware(http.HandlerFunc(apiKeyHandler.Create)))
-	mux.Handle("GET /v1/auth/api-keys",               deviceMiddleware(http.HandlerFunc(apiKeyHandler.List)))
-	mux.Handle("DELETE /v1/auth/api-keys/{key_id}",   deviceMiddleware(http.HandlerFunc(apiKeyHandler.Revoke)))
+	mux.Handle("POST /v1/auth/api-keys",            deviceMiddleware(http.HandlerFunc(apiKeyHandler.Create)))
+	mux.Handle("GET /v1/auth/api-keys",             deviceMiddleware(http.HandlerFunc(apiKeyHandler.List)))
+	mux.Handle("DELETE /v1/auth/api-keys/{key_id}", deviceMiddleware(http.HandlerFunc(apiKeyHandler.Revoke)))
 	mux.HandleFunc("POST /v1/auth/internal/api-keys/verify", apiKeyHandler.VerifyInternal)
 
 	// ── Account Recovery ──────────────────────────────────────────────────
@@ -247,9 +253,9 @@ func main() {
 	mux.Handle("POST /v1/auth/register", deviceMiddleware(http.HandlerFunc(registerHandler.Register)))
 
 	// ── M8: Agent Identity ────────────────────────────────────────────────
-	mux.Handle("POST /v1/auth/agents",                    deviceMiddleware(http.HandlerFunc(agentHandler.CreateAgent)))
-	mux.Handle("GET /v1/auth/agents",                     deviceMiddleware(http.HandlerFunc(agentHandler.ListAgents)))
-	mux.Handle("DELETE /v1/auth/agents/{agent_id}",       deviceMiddleware(http.HandlerFunc(agentHandler.SuspendAgent)))
+	mux.Handle("POST /v1/auth/agents",              deviceMiddleware(http.HandlerFunc(agentHandler.CreateAgent)))
+	mux.Handle("GET /v1/auth/agents",               deviceMiddleware(http.HandlerFunc(agentHandler.ListAgents)))
+	mux.Handle("DELETE /v1/auth/agents/{agent_id}", deviceMiddleware(http.HandlerFunc(agentHandler.SuspendAgent)))
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),
@@ -279,7 +285,7 @@ func main() {
 	log.Info("shutdown complete")
 }
 
-// ── Login handlers (unchanged) ────────────────────────────────────────────
+// ── Login handlers ────────────────────────────────────────────────────────
 
 type loginRequest struct {
 	Code        string `json:"code"`
@@ -374,7 +380,11 @@ func makeLoginHandler(cfg Config, pg *postgres.Client, jwtSvc *appjwt.Service, r
 		}
 		loginTotal.WithLabelValues("success").Inc()
 		tokenIssued.Inc()
-		log.Info("user logged in", zap.String("user_id", user.ID), zap.String("tenant", tenant.Slug), zap.String("role", role))
+		log.Info("user logged in",
+			zap.String("user_id", user.ID),
+			zap.String("tenant", tenant.Slug),
+			zap.String("role", role),
+		)
 		jsonOK(w, tokenResponse{AccessToken: token, RefreshToken: rawRefresh, ExpiresIn: int(appjwt.AccessTokenTTL.Seconds()), TokenType: "Bearer"})
 	}
 }
@@ -597,11 +607,18 @@ func generateToken() string {
 }
 
 func initTracer(endpoint string) (*sdktrace.TracerProvider, error) {
-	exp, err := otlptracegrpc.New(context.Background(), otlptracegrpc.WithEndpoint(endpoint), otlptracegrpc.WithInsecure())
+	exp, err := otlptracegrpc.New(
+		context.Background(),
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithInsecure(),
+	)
 	if err != nil {
 		return nil, err
 	}
-	return sdktrace.NewTracerProvider(sdktrace.WithBatcher(exp), sdktrace.WithSampler(sdktrace.AlwaysSample())), nil
+	return sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	), nil
 }
 
 func getEnv(key, fallback string) string {
