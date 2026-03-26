@@ -1,3 +1,7 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Full path: k8s/base/api-gateway/gateway.yaml                   ║
+# ║  Status: ✏️ Modified — M7 إضافة MENA listener                   ║
+# ╚══════════════════════════════════════════════════════════════════╝
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -9,7 +13,7 @@ metadata:
 spec:
   gatewayClassName: envoy-gateway
   listeners:
-    # ── HTTPS / gRPC-Web ────────────────────────────────────────
+    # ── HTTPS / gRPC-Web ────────────────────────────────────────────
     - name: https
       protocol: HTTPS
       port: 443
@@ -22,7 +26,7 @@ spec:
         namespaces:
           from: Same
 
-    # ── HTTP → redirect to HTTPS ────────────────────────────────
+    # ── HTTP → redirect to HTTPS ────────────────────────────────────
     - name: http
       protocol: HTTP
       port: 80
@@ -30,7 +34,7 @@ spec:
         namespaces:
           from: Same
 
-    # ── gRPC native (internal) ──────────────────────────────────
+    # ── gRPC native (internal) ──────────────────────────────────────
     - name: grpc
       protocol: HTTPS
       port: 8443
@@ -38,6 +42,24 @@ spec:
         mode: Terminate
         certificateRefs:
           - name: platform-tls
+            namespace: platform
+      allowedRoutes:
+        namespaces:
+          from: Same
+
+    # ── MENA Region (Data Sovereignty — UAE / Bahrain) ──────────────
+    # M7: Data Sovereignty Stub
+    # يُفعَّل عند تشغيل enable_mena_region = true في Terraform
+    # يتطلب: ExternalSecret platform-tls-me من AWS Secrets Manager
+    # hostname: *.platform-me.com — منفصل عن *.platform.com الرئيسي
+    - name: https-me
+      protocol: HTTPS
+      port: 443
+      hostname: "*.platform-me.com"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: platform-tls-me
             namespace: platform
       allowedRoutes:
         namespaces:
