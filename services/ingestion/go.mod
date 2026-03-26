@@ -1,7 +1,3 @@
-# ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  المسار الكامل: services/ingestion/go.mod                               ║
-# ║  الحالة: ✏️ معدل — إضافة github.com/segmentio/kafka-go v0.4.50          ║
-# ╚══════════════════════════════════════════════════════════════════════════╝
 module github.com/aminpola2001-ctrl/youtuop/services/ingestion
 
 go 1.24.0
@@ -15,7 +11,7 @@ require (
 	github.com/parquet-go/parquet-go v0.23.0
 	github.com/pressly/goose/v3 v3.20.0
 	github.com/prometheus/client_golang v1.19.0
-	github.com/segmentio/kafka-go v0.4.50
+	github.com/segmentio/kafka-go v0.4.47
 	github.com/sony/gobreaker v0.5.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0
 	go.opentelemetry.io/otel v1.40.0
@@ -62,9 +58,6 @@ require (
 	github.com/segmentio/encoding v0.4.0 // indirect
 	github.com/sethvargo/go-retry v0.2.4 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
-	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
-	github.com/xdg-go/scram v1.1.2 // indirect
-	github.com/xdg-go/stringprep v1.0.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.40.0 // indirect
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
