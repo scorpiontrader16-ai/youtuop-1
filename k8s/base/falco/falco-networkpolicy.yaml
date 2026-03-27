@@ -1,0 +1,183 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Full path: k8s/base/falco/falco-networkpolicy.yaml                 ║
+# ║  Status: 🆕 New                                                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# Traffic map:
+#   [Falco DaemonSet] ──HTTP:2801──► [Falcosidekick Deployment]
+#   [Falcosidekick]   ──HTTP:9093──► [AlertManager] (monitoring NS)
+#   [Falcosidekick]   ──HTTPS:443──► [Slack API]    (external)
+#   [VictoriaMetrics] ──HTTP:2802──► [Falcosidekick] (scrape, monitoring NS)
+#   [All pods]        ──UDP/TCP:53──► [CoreDNS]       (kube-system NS)
+#
+# Labels used by Falco Helm chart v3.8.0:
+#   Falco DaemonSet pods:      app.kubernetes.io/name=falco
+#   Falcosidekick Deploy pods: app.kubernetes.io/name=falcosidekick
+
+---
+# ── 1. Default deny-all — falco namespace ────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: falco-deny-all
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# ── 2. Allow DNS egress (CoreDNS) — all pods in falco namespace ──────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: falco-allow-dns-egress
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# ── 3. Allow Falco DaemonSet → Falcosidekick (HTTP port 2801) ────────────────
+# Falco pushes security events to Falcosidekick via HTTP on port 2801
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: falco-allow-falco-to-falcosidekick
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: falco
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: falcosidekick
+      ports:
+        - port: 2801
+          protocol: TCP
+---
+# ── 4. Allow Falcosidekick ← Falco DaemonSet ingress ────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: falco-allow-falcosidekick-ingress-from-falco
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: falcosidekick
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: falco
+      ports:
+        - port: 2801
+          protocol: TCP
+---
+# ── 5. Allow Falcosidekick → AlertManager (port 9093, monitoring NS) ─────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: falco-allow-falcosidekick-to-alertmanager
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: falcosidekick
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - port: 9093
+          protocol: TCP
+---
+# ── 6. Allow Falcosidekick → Slack API (HTTPS port 443, external) ────────────
+# Redundant path alongside AlertManager for direct Slack alerts
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: falco-allow-falcosidekick-slack-egress
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: falcosidekick
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+---
+# ── 7. Allow VictoriaMetrics → Falcosidekick metrics scrape (port 2802) ──────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: falco-allow-metrics-scrape
+  namespace: falco
+  labels:
+    app.kubernetes.io/name: falco
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: falcosidekick
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - port: 2802
+          protocol: TCP
