@@ -1,0 +1,48 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Full path: k8s/overlays/production/notifications/kustomization.yaml ║
+# ║  Status: 🆕 New                                                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+# ─────────────────────────────────────────────────────────────────────────────
+# notifications service — Go 1.24
+# الـ image tag يتحدث تلقائياً من release.yml workflow
+# لا تعدّل newTag يدوياً
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: platform
+resources:
+  - ../../../base/notifications
+images:
+  - name: ghcr.io/scorpiontrader16-ai/youtuop-1/notifications
+    newTag: "1.0.0"
+patches:
+  - target:
+      kind: Rollout
+      name: notifications
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "100m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "512Mi"
+      - op: add
+        path: /spec/template/spec/nodeSelector
+        value:
+          kubernetes.io/arch: arm64
+      - op: add
+        path: /spec/template/spec/tolerations
+        value:
+          - key: "kubernetes.io/arch"
+            operator: "Equal"
+            value: "arm64"
+            effect: "NoSchedule"
