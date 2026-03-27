@@ -1,3 +1,7 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Full path: infra/argocd/apps/applications.yaml                     ║
+# ║  Status: ✏️ Modified — added falco-config (wave 1) + falco (wave 2) ║
+# ╚══════════════════════════════════════════════════════════════════════╝
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -220,6 +224,208 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+---
+# ── GAP-03: Falco Runtime Security ───────────────────────────────────────────
+# Wave 1 — ExternalSecret (falco-secrets) + NetworkPolicy
+# يجب أن يكتمل قبل wave 2 حتى يكون الـ Secret موجوداً لـ Falcosidekick
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  labels:
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/scorpiontrader16-ai/youtuop-1.git
+    targetRevision: main
+    path: k8s/base/falco
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: falco
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+# ── GAP-03: Falco Helm Chart ──────────────────────────────────────────────────
+# Wave 2 — يبدأ بعد falco-config (wave 1) لضمان وجود falco-secrets
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: falco
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app.kubernetes.io/component: runtime-security
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  project: default
+  source:
+    repoURL: https://falcosecurity.github.io/charts
+    chart: falco
+    targetRevision: 3.8.0
+    helm:
+      values: |
+        # ── Driver ────────────────────────────────────────────────────────────
+        driver:
+          kind: modern_ebpf
+
+        tty: true
+
+        # ── Falco core ────────────────────────────────────────────────────────
+        falco:
+          grpc:
+            enabled: true
+          grpc_output:
+            enabled: true
+          json_output: true
+          json_include_output_property: true
+          log_level: info
+
+        # ── Collectors ───────────────────────────────────────────────────────
+        collectors:
+          containerd:
+            enabled: true
+            socket: /run/containerd/containerd.sock
+          docker:
+            enabled: false
+          cri:
+            enabled: true
+            socket: /run/containerd/containerd.sock
+
+        # ── DaemonSet: node scheduling ───────────────────────────────────────
+        nodeSelector:
+          kubernetes.io/arch: arm64
+
+        # Security critical — must not be evicted under node pressure
+        priorityClassName: system-node-critical
+
+        tolerations:
+          - effect: NoSchedule
+            operator: Exists
+
+        # ── DaemonSet: resources ─────────────────────────────────────────────
+        # modern_ebpf peak usage during high-syscall bursts
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1024Mi
+
+        # ── Falcosidekick ─────────────────────────────────────────────────────
+        falcosidekick:
+          enabled: true
+          replicaCount: 2
+
+          # Security critical — must not be evicted
+          priorityClassName: system-cluster-critical
+
+          config:
+            slack:
+              # Value injected at runtime via FALCOSIDEKICK_SLACK_WEBHOOKURL env var
+              # from falco-secrets (ExternalSecret → AWS SM: platform/falco)
+              webhookurl: ""
+              minimumpriority: warning
+              outputformat: "all"
+            alertmanager:
+              # Use FQDN to avoid DNS lookup failures across namespaces
+              hostport: "http://alertmanager.monitoring.svc.cluster.local:9093"
+              minimumpriority: warning
+              endpoint: "/api/v2/alerts"
+
+          # Inject Slack webhook from ExternalSecret-managed Secret
+          # Falcosidekick uses Viper with SetEnvPrefix("FALCOSIDEKICK") + AutomaticEnv()
+          # Config key "slack.webhookurl" → env var "FALCOSIDEKICK_SLACK_WEBHOOKURL"
+          extraEnv:
+            - name: FALCOSIDEKICK_SLACK_WEBHOOKURL
+              valueFrom:
+                secretKeyRef:
+                  name: falco-secrets
+                  key: SLACK_WEBHOOK_URL
+
+          # ── Falcosidekick: security context ──────────────────────────────
+          podSecurityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            fsGroup: 65534
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          # tmpfs for potential temp writes (Go runtime)
+          extraVolumes:
+            - name: tmp
+              emptyDir: {}
+
+          extraVolumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+          # ── Falcosidekick: resources ──────────────────────────────────────
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+
+          # ── Falcosidekick: node scheduling ────────────────────────────────
+          nodeSelector:
+            kubernetes.io/arch: arm64
+
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: falcosidekick
+            - maxSkew: 1
+              topologyKey: kubernetes.io/hostname
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: falcosidekick
+
+          # ── Falcosidekick: metrics ────────────────────────────────────────
+          # VictoriaMetrics scrapes port 2802 — annotation-based discovery
+          podAnnotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "2802"
+            prometheus.io/path: "/metrics"
+
+          # ── Falcosidekick: labels ─────────────────────────────────────────
+          podLabels:
+            app.kubernetes.io/part-of: youtuop-platform
+            app.kubernetes.io/managed-by: helm
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: falco
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
 ---
 # cross-region-sync — معطّل مؤقتاً لحد ما يتعمل k8s/base/sync/
 # apiVersion: argoproj.io/v1alpha1
