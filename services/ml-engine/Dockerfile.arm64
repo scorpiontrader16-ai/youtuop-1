@@ -1,0 +1,9 @@
+FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN CGO_ENABLED=0 GOARCH=arm64 go build -o /ml-engine ./...
+
+FROM gcr.io/distroless/static:nonroot
+COPY --from=builder /ml-engine /ml-engine
+USER nonroot:nonroot
+ENTRYPOINT ["/ml-engine"]

@@ -1,0 +1,10 @@
+FROM golang:1.23-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN go mod download 2>/dev/null || true
+RUN CGO_ENABLED=0 GOARCH=arm64 go build -o /hydration ./...
+
+FROM gcr.io/distroless/static:nonroot
+COPY --from=builder /hydration /hydration
+USER nonroot:nonroot
+ENTRYPOINT ["/hydration"]
