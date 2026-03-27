@@ -112,14 +112,51 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Ingestion: context = services/ingestion (Dockerfile لا يحتاج proto)
           - service: ingestion
             context: services/ingestion
             dockerfile: services/ingestion/Dockerfile.arm64
-          # Processing: context = . (repo root) لأن Dockerfile يحتاج proto/
           - service: processing
             context: .
             dockerfile: services/processing/Dockerfile.arm64
+          - service: auth
+            context: services/auth
+            dockerfile: services/auth/Dockerfile.arm64
+          - service: billing
+            context: services/billing
+            dockerfile: services/billing/Dockerfile.arm64
+          - service: notifications
+            context: services/notifications
+            dockerfile: services/notifications/Dockerfile.arm64
+          - service: feature-flags
+            context: services/feature-flags
+            dockerfile: services/feature-flags/Dockerfile.arm64
+          - service: control-plane
+            context: services/control-plane
+            dockerfile: services/control-plane/Dockerfile.arm64
+          - service: developer-portal
+            context: services/developer-portal
+            dockerfile: services/developer-portal/Dockerfile.arm64
+          - service: tenant-operator
+            context: services/tenant-operator
+            dockerfile: services/tenant-operator/Dockerfile.arm64
+          - service: hydration
+            context: services/hydration
+            dockerfile: services/hydration/Dockerfile.arm64
+          - service: analytics
+            context: services/analytics
+            dockerfile: services/analytics/Dockerfile.arm64
+          - service: search
+            context: services/search
+            dockerfile: services/search/Dockerfile.arm64
+          - service: jobs
+            context: services/jobs
+            dockerfile: services/jobs/Dockerfile.arm64
+          - service: realtime
+            context: services/realtime
+            dockerfile: services/realtime/Dockerfile.arm64
+          - service: ml-engine
+            context: services/ml-engine
+            dockerfile: services/ml-engine/Dockerfile.arm64
     steps:
       - uses: actions/checkout@v4
         with:
