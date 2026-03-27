@@ -1,0 +1,127 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Full path: infra/argocd/applicationsets/platform-appset.yaml       ║
+# ║  Status: 🆕 New                                                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# يُدير جميع الـ 15 platform service في بيئة production
+# كل service يصبح Application منفصل باسم: {service}-prod
+#
+# الـ image tag يتحدث تلقائياً من:
+#   .github/workflows/release.yml → يعدّل newTag في overlay kustomization.yaml
+#
+# ignoreDifferences على /spec/replicas:
+#   KEDA يتحكم في عدد الـ replicas — ArgoCD لا يتدخل
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-services
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: platform-services
+    app.kubernetes.io/component: gitops
+    app.kubernetes.io/managed-by: argocd
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  # ─── Generator — List of all 15 services ─────────────────────────────────
+  generators:
+    - list:
+        elements:
+          # ── Core Data Pipeline ──────────────────────────────────────────
+          - service: ingestion
+            wave: "1"
+          - service: processing
+            wave: "1"
+          # ── Auth & Security ─────────────────────────────────────────────
+          - service: auth
+            wave: "1"
+          # ── Business Services ───────────────────────────────────────────
+          - service: billing
+            wave: "2"
+          - service: notifications
+            wave: "2"
+          - service: feature-flags
+            wave: "2"
+          # ── Platform Services ───────────────────────────────────────────
+          - service: control-plane
+            wave: "2"
+          - service: developer-portal
+            wave: "2"
+          - service: tenant-operator
+            wave: "2"
+          - service: hydration
+            wave: "2"
+          # ── Data & Analytics ────────────────────────────────────────────
+          - service: analytics
+            wave: "3"
+          - service: search
+            wave: "3"
+          - service: jobs
+            wave: "3"
+          - service: realtime
+            wave: "3"
+          # ── AI / ML ─────────────────────────────────────────────────────
+          - service: ml-engine
+            wave: "3"
+
+  # ─── Template — Applied to every element ─────────────────────────────────
+  template:
+    metadata:
+      # اسم فريد لكل service — لا يتعارض مع applications.yaml
+      name: "{{service}}-prod"
+      namespace: argocd
+      annotations:
+        # wave مُعرَّف per-service في الـ generator
+        argocd.argoproj.io/sync-wave: "{{wave}}"
+        notifications.argoproj.io/subscribe.on-sync-failed.slack: alerts-deploy
+        notifications.argoproj.io/subscribe.on-health-degraded.slack: alerts-critical
+        notifications.argoproj.io/subscribe.on-sync-succeeded.slack: alerts-deploy
+      labels:
+        app.kubernetes.io/name: "{{service}}"
+        app.kubernetes.io/component: service
+        app.kubernetes.io/managed-by: argocd-appset
+        app.kubernetes.io/part-of: youtuop-platform
+    spec:
+      project: default
+
+      # ─── Source — overlay لكل service ──────────────────────────────────
+      source:
+        repoURL: https://github.com/scorpiontrader16-ai/youtuop-1.git
+        targetRevision: main
+        path: "k8s/overlays/production/{{service}}"
+
+      # ─── Destination ────────────────────────────────────────────────────
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: platform
+
+      # ─── Sync Policy ────────────────────────────────────────────────────
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - PrunePropagationPolicy=foreground
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
+
+      # ─── ignoreDifferences — KEDA يتحكم في الـ replicas ────────────────
+      ignoreDifferences:
+        - group: argoproj.io
+          kind: Rollout
+          jsonPointers:
+            - /spec/replicas
+
+  # ─── Sync Policy للـ ApplicationSet نفسه ─────────────────────────────────
+  syncPolicy:
+    # حذف الـ Application تلقائياً لو حُذف من الـ list
+    applicationsSync: sync
+    preserveResourcesOnDeletion: false
