@@ -1,0 +1,258 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Full path: infra/falco/platform-rules.yaml                         ║
+# ║  Status: 🆕 New                                                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# Purpose  : Helm values overlay — platform-specific Falco detection rules
+# Format   : customRules key injected into the falco Helm chart (chart 3.8.0)
+#            Falco auto-mounts this as a ConfigMap and loads it at startup.
+#
+# Consumed : ArgoCD Application `falco` (wave 2) via multi-source.
+#            The `falco` Application in infra/argocd/apps/applications.yaml
+#            MUST be converted to multi-source to reference this file:
+#
+#   sources:
+#     - repoURL: https://falcosecurity.github.io/charts
+#       chart: falco
+#       targetRevision: 3.8.0
+#       helm:
+#         valueFiles:
+#           - $values/infra/falco/platform-rules.yaml   # ← this file
+#         values: |
+#           <existing inline values>
+#     - repoURL: https://github.com/scorpiontrader16-ai/youtuop-1.git
+#       targetRevision: main
+#       ref: values                                      # ← provides $values
+#
+# Falco    : chart 3.8.0 / core ~0.38.x / driver: modern_ebpf (EKS ARM64)
+# Reviewed : YAML validated — 4 lists, 3 macros, 4 rules — 0 errors
+# ─────────────────────────────────────────────────────────────────────────────
+
+customRules:
+  platform-rules.yaml: |-
+
+    # ══════════════════════════════════════════════════════════════════════
+    # LISTS
+    # Must be declared before any macro or rule that references them.
+    # Falco resolves symbol references top-to-bottom within a rule file.
+    # ══════════════════════════════════════════════════════════════════════
+
+    # Namespaces protected by these rules.
+    # platform-prod is the production-grade replica of the platform namespace.
+    - list: platform_namespaces
+      items: ["platform", "platform-prod"]
+
+    # Shell binaries that must never spawn inside production pods.
+    # Add ksh93 / busybox if your base image includes them.
+    - list: platform_shell_binaries
+      items: [bash, sh, dash, zsh, fish, ksh, ash, csh, tcsh]
+
+    # OS-level package managers and CA-update tools legitimately allowed
+    # to write under /etc (base-image build time only — not runtime).
+    # All platform containers enforce readOnlyRootFilesystem=true, so any
+    # runtime match here is itself anomalous.
+    - list: platform_etc_write_allowed_procs
+      items: [apt, apt-get, dpkg, rpm, yum, microdnf, update-ca-certificates]
+
+    # Network utilities and interpreters that must never appear in
+    # production container images. Their presence — and especially their
+    # making an outbound connection — is a strong indicator of:
+    #   • supply-chain compromise in the container image
+    #   • active RCE exploitation spawning a reverse shell
+    #   • data exfiltration via an alternative protocol
+    - list: platform_net_tools
+      items:
+        - nc
+        - ncat
+        - netcat
+        - nmap
+        - socat
+        - telnet
+        - wget
+        - curl
+        - python
+        - python3
+        - perl
+        - ruby
+        - php
+        - lua
+        - node
+
+    # ══════════════════════════════════════════════════════════════════════
+    # MACROS
+    # Reusable conditions composed from lists above and built-in Falco
+    # fields. Define all macros before rules that use them.
+    # ══════════════════════════════════════════════════════════════════════
+
+    # True when the event originates from a pod in a protected namespace.
+    - macro: platform_namespace
+      condition: k8s.ns.name in (platform_namespaces)
+
+    # Debug pods provisioned via GitOps are exempt from shell-spawn alerts.
+    # Convention enforced by Kyverno policy: all debug pods MUST be named
+    # with the prefix "debug-" (e.g., debug-curl-abc123).
+    - macro: platform_debug_pod
+      condition: k8s.pod.name startswith "debug-"
+
+    # Container liveness/readiness probes are excluded from outbound-connection
+    # rules to prevent false positives on grpc-health-probe and similar tools.
+    # Introduced in Falco 0.34.0 — available in chart 3.8.0 (core ~0.38.x).
+    - macro: platform_healthcheck_proc
+      condition: proc.is_container_healthcheck = true
+
+    # ══════════════════════════════════════════════════════════════════════
+    # RULES
+    # ══════════════════════════════════════════════════════════════════════
+
+    # ── Rule 1 ────────────────────────────────────────────────────────────
+    # Shell Spawned in Platform Namespace
+    #
+    # MITRE ATT&CK: T1059 — Command and Scripting Interpreter
+    # Threat model:
+    #   • kubectl exec / kubectl debug used by an insider or compromised token
+    #   • First stage of a container escape (shell needed for pivot)
+    #   • RCE exploitation of a service vulnerability
+    #
+    # Exclusion rationale:
+    #   debug-* pods are provisioned by GitOps (ArgoCD) with explicit approval.
+    #   All other pods must reach production without a shell in their image.
+    #   Enforced upstream by Kyverno image-signing + distroless base policy.
+    #
+    # Precedence: CRITICAL — page on-call immediately via PagerDuty.
+    - rule: Terminal Shell in Platform Namespace
+      desc: >
+        A shell binary (bash, sh, dash, etc.) was executed inside a container
+        running in a platform namespace. Production workloads must never spawn
+        interactive shells. This event indicates kubectl exec abuse, active RCE
+        exploitation, or a container escape attempt in progress.
+      condition: >
+        spawned_process and
+        container and
+        proc.name in (platform_shell_binaries) and
+        platform_namespace and
+        not platform_debug_pod
+      output: >
+        Shell spawned in platform pod
+        (pod=%k8s.pod.name ns=%k8s.ns.name
+        cmd=%proc.cmdline user=%user.name parent=%proc.pname
+        image=%container.image.repository:%container.image.tag)
+      priority: CRITICAL
+      tags: [platform, intrusion, shell, T1059]
+      source: syscall
+
+    # ── Rule 2 ────────────────────────────────────────────────────────────
+    # Write to /etc Inside Platform Container
+    #
+    # MITRE ATT&CK: T1565.001 — Data Manipulation: Stored Data Manipulation
+    # Threat model:
+    #   • /etc/passwd or /etc/shadow tampering (privilege persistence)
+    #   • /etc/hosts poisoning (SSRF / internal DNS hijack)
+    #   • /etc/ld.so.preload injection (shared-library rootkit)
+    #
+    # Exclusion rationale:
+    #   platform_etc_write_allowed_procs covers OS-level package tools that
+    #   may run during image build stages; they cannot run at runtime in a
+    #   readOnlyRootFilesystem=true container.
+    #
+    # Precedence: WARNING — alert to #alerts-warnings + AlertManager.
+    - rule: Write to /etc in Platform Container
+      desc: >
+        A process attempted to open a file under /etc for writing inside a
+        platform namespace container. All platform workloads enforce
+        readOnlyRootFilesystem=true; any write to /etc at runtime bypasses
+        the container security policy and requires immediate investigation.
+      condition: >
+        open_write and
+        container and
+        platform_namespace and
+        fd.name startswith "/etc" and
+        not proc.name in (platform_etc_write_allowed_procs)
+      output: >
+        Write to /etc in platform container
+        (file=%fd.name proc=%proc.name
+        pod=%k8s.pod.name ns=%k8s.ns.name
+        image=%container.image.repository:%container.image.tag)
+      priority: WARNING
+      tags: [platform, tamper, filesystem, T1565]
+      source: syscall
+
+    # ── Rule 3 ────────────────────────────────────────────────────────────
+    # Network Tool / Interpreter Making Outbound Connection
+    #
+    # MITRE ATT&CK: T1048 — Exfiltration Over Alternative Protocol
+    #               T1071 — Application Layer Protocol
+    # Threat model:
+    #   • Reverse shell (nc/socat → attacker C2)
+    #   • curl/wget downloading second-stage payload
+    #   • Python/node running embedded exfiltration script
+    #
+    # Design decision — process-based rather than IP-based filtering:
+    #   IP allowlists become stale and create operational burden.
+    #   A network tool present and active in a production container is
+    #   inherently anomalous regardless of destination — the image itself
+    #   should not contain these binaries (enforced by Kyverno + Trivy).
+    #   Cilium NetworkPolicy handles destination-based enforcement; Falco
+    #   handles process-level behavioural detection.
+    #
+    # Precedence: WARNING — alert to #alerts-warnings + AlertManager.
+    - rule: Unexpected Outbound Connection from Platform Container
+      desc: >
+        A network utility or scripting interpreter (nc, curl, wget, python, etc.)
+        opened an outbound connection from inside a platform namespace pod.
+        Production service images must not contain these tools. Their presence
+        and execution is a strong indicator of a reverse shell, data exfiltration,
+        or C2 beacon. Review the container image provenance immediately.
+      condition: >
+        outbound and
+        container and
+        platform_namespace and
+        proc.name in (platform_net_tools) and
+        not platform_healthcheck_proc
+      output: >
+        Network tool outbound from platform container
+        (proc=%proc.name pod=%k8s.pod.name ns=%k8s.ns.name
+        dest_ip=%fd.rip dest_port=%fd.rport
+        cmd=%proc.cmdline
+        image=%container.image.repository:%container.image.tag)
+      priority: WARNING
+      tags: [platform, network, exfiltration, T1048, T1071]
+      source: syscall
+
+    # ── Rule 4 ────────────────────────────────────────────────────────────
+    # Privilege Escalation via setuid / setgid
+    #
+    # MITRE ATT&CK: T1548.001 — Abuse Elevation Control Mechanism: Setuid/Setgid
+    # Threat model:
+    #   • Container escape: attacker gains root UID inside container,
+    #     then exploits a kernel vulnerability to break out
+    #   • Capability abuse after partial container breakout
+    #   • SUID binary exploitation (chmod +s on dropped binary)
+    #
+    # All platform workloads enforce:
+    #   securityContext.allowPrivilegeEscalation: false
+    #   securityContext.capabilities.drop: [ALL]
+    #   securityContext.runAsNonRoot: true
+    # Any setuid/setgid call in this context is inherently anomalous.
+    # No exclusions — there are zero legitimate cases in this namespace.
+    #
+    # Precedence: CRITICAL — page on-call immediately via PagerDuty.
+    - rule: Privilege Escalation Attempt in Platform Container
+      desc: >
+        A process called the setuid or setgid syscall inside a platform
+        namespace container. All platform workloads enforce
+        allowPrivilegeEscalation=false and drop all Linux capabilities.
+        This event indicates an active attempt to bypass container security
+        policy — possible container escape attempt in progress.
+      condition: >
+        evt.type in (setuid, setgid) and
+        container and
+        platform_namespace
+      output: >
+        Privilege escalation attempt in platform container
+        (evt=%evt.type proc=%proc.name
+        pod=%k8s.pod.name ns=%k8s.ns.name
+        user=%user.name uid=%user.uid
+        image=%container.image.repository:%container.image.tag)
+      priority: CRITICAL
+      tags: [platform, privilege-escalation, container-escape, T1548]
+      source: syscall
