@@ -80,7 +80,7 @@ jobs:
 
       - name: Validate production overlays
         run: |
-          for overlay in k8s/overlays/production/ingestion k8s/overlays/production/processing; do
+          for overlay in k8s/overlays/production/*/; do
             if [ -f "$overlay/kustomization.yaml" ]; then
               echo "=== Validating $overlay ==="
               kustomize build "$overlay" | kubeconform \
