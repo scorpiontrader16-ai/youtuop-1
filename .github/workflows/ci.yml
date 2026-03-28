@@ -109,7 +109,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on ingestion
         run: |
           trivy fs \
@@ -128,7 +128,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on processing
         run: |
           trivy fs \
@@ -147,7 +147,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on auth
         run: |
           trivy fs \
@@ -166,7 +166,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on billing
         run: |
           trivy fs \
@@ -185,7 +185,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on notifications
         run: |
           trivy fs \
@@ -204,7 +204,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on control-plane
         run: |
           trivy fs \
@@ -223,7 +223,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on feature-flags
         run: |
           trivy fs \
@@ -242,7 +242,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on developer-portal
         run: |
           trivy fs \
@@ -261,7 +261,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on realtime
         run: |
           trivy fs \
@@ -280,7 +280,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on search
         run: |
           trivy fs \
@@ -299,7 +299,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on analytics
         run: |
           trivy fs \
@@ -318,7 +318,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on jobs
         run: |
           trivy fs \
@@ -337,7 +337,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on tenant-operator
         run: |
           trivy fs \
@@ -859,7 +859,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on hydration
         run: |
           trivy fs \
@@ -878,7 +878,7 @@ jobs:
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
-            | sh -s -- -b /usr/local/bin v0.69.3
+            | sh -s -- -b /usr/local/bin
       - name: Run Trivy on ml-engine
         run: |
           trivy fs \
