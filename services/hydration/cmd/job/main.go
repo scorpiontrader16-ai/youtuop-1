@@ -1,4 +1,4 @@
-// services/hydration/main.go
+// services/hydration/cmd/job/main.go
 // Cold Start Hydration Service
 // يبعت warm-up requests للـ Rust Processing Engine عشان يتجنب cold start latency
 // بيشتغل كـ Job في Kubernetes قبل ما يبدأ الـ Rollout traffic
