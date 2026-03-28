@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
-FROM arm64v8/golang:1.24-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine-alpine AS builder
+ARG TARGETOS=linux
+ARG TARGETARCH=arm64
 
 WORKDIR /app
 
@@ -10,14 +12,13 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
     -trimpath \
     -o /search-server ./cmd/server
 
-FROM arm64v8/alpine:3.20
+FROM gcr.io/distroless/static-debian12:nonroot
 
-RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /search-server /search-server
 
