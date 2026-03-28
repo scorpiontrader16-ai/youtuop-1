@@ -9,7 +9,7 @@ package platform.ingestion.v1;
 
 // go_package يتطابق مع module path في go.mod
 // الـ suffix ";schema" يحدد اسم الـ Go package المُولَّد
-option go_package = "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/schema;schema";
+option go_package = "github.com/scorpiontrader16-ai/youtuop-1/services/ingestion/internal/schema;schema";
 
 // FeatureEvent — يُرسَل إلى Redpanda topic "feature-events"
 // يُستهلَك من ML pipeline لـ Online Learning و Feature Store
