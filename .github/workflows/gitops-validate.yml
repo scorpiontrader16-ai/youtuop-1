@@ -129,7 +129,9 @@ jobs:
 
               if not spec.get('project'):
                   errors.append(f"{name}: missing project")
-              if not source.get('repoURL'):
+              sources = spec.get('sources', [])
+              has_repo = source.get('repoURL') or any(s.get('repoURL') for s in sources)
+              if not has_repo:
                   errors.append(f"{name}: missing repoURL")
               if not spec.get('destination', {}).get('namespace'):
                   errors.append(f"{name}: missing destination.namespace")
