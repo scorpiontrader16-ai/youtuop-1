@@ -1128,8 +1128,8 @@ jobs:
         id: build-ml-engine
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: services/ml-engine/Dockerfile.arm64
+          context: services/ml-engine
+          file: services/ml-engine/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |

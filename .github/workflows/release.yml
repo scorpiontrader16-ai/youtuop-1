@@ -156,7 +156,7 @@ jobs:
             dockerfile: services/realtime/Dockerfile.arm64
           - service: ml-engine
             context: services/ml-engine
-            dockerfile: services/ml-engine/Dockerfile.arm64
+            dockerfile: services/ml-engine/Dockerfile
     steps:
       - uses: actions/checkout@v4
         with:
