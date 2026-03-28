@@ -11,7 +11,6 @@ require (
 	github.com/parquet-go/parquet-go v0.23.0
 	github.com/pressly/goose/v3 v3.20.0
 	github.com/prometheus/client_golang v1.19.0
-	github.com/scorpiontrader16-ai/youtuop-1 v0.0.0-00010101000000-000000000000
 	github.com/segmentio/kafka-go v0.4.47
 	github.com/sony/gobreaker v0.5.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0
