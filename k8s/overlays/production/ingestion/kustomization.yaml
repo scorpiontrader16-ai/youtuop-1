@@ -7,13 +7,11 @@ kind: Kustomization
 namespace: platform
 resources:
   - ../../../base/ingestion
-
 # الـ image tag بيتحدث تلقائياً من release.yml
 # لا تعدّل :latest يدوياً — استخدم semantic version أو SHA digest
 images:
   - name: ghcr.io/scorpiontrader16-ai/youtuop-1/ingestion
-    newTag: "1.0.0"
-
+    newTag: "1.0.117"
 patches:
   - target:
       kind: Rollout
