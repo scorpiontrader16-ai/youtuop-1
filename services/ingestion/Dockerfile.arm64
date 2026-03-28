@@ -5,6 +5,7 @@ ARG BUILD_VERSION=dev
 WORKDIR /repo
 COPY go.mod go.sum ./
 COPY services/ingestion/ ./services/ingestion/
+COPY gen/ ./gen/
 WORKDIR /repo/services/ingestion
 RUN go mod download && go mod verify
 RUN go mod tidy && \
