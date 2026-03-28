@@ -6,8 +6,8 @@ pydantic-settings==2.4.0
 # ML frameworks
 scikit-learn==1.5.2
 xgboost==2.1.1
-lightgbm==4.5.0
-torch==2.4.1
+lightgbm==4.6.0
+torch==2.6.0
 transformers==4.48.0
 onnxruntime==1.19.2
 numpy==2.1.1
@@ -31,4 +31,4 @@ boto3==1.35.36
 # gRPC
 grpcio==1.62.2
 grpcio-tools==1.62.2
-protobuf==4.25.5
+protobuf==5.29.6
