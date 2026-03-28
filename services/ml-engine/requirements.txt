@@ -19,7 +19,7 @@ redis==5.1.0
 sqlalchemy[asyncio]==2.0.36
 
 # Observability
-prometheus-client==0.21.0
+prometheus-client==0.24.1
 opentelemetry-api==1.28.0
 opentelemetry-sdk==1.28.0
 opentelemetry-exporter-otlp-proto-grpc==1.28.0
