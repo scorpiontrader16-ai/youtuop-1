@@ -33,11 +33,11 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 
-	appjwt "github.com/aminpola2001-ctrl/youtuop/services/auth/internal/jwt"
-	"github.com/aminpola2001-ctrl/youtuop/services/auth/internal/handlers"
-	"github.com/aminpola2001-ctrl/youtuop/services/auth/internal/middleware"
-	"github.com/aminpola2001-ctrl/youtuop/services/auth/internal/postgres"
-	"github.com/aminpola2001-ctrl/youtuop/services/auth/internal/rbac"
+	appjwt "github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/jwt"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/handlers"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/middleware"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/postgres"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/rbac"
 )
 
 var version = "dev"

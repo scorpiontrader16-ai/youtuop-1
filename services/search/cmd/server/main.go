@@ -25,8 +25,8 @@ import (
     "google.golang.org/grpc"
     "google.golang.org/grpc/health/grpc_health_v1"
 
-    "github.com/aminpola2001-ctrl/youtuop/services/search/internal/elastic"
-    "github.com/aminpola2001-ctrl/youtuop/services/search/internal/postgres"
+    "github.com/scorpiontrader16-ai/youtuop-1/services/search/internal/elastic"
+    "github.com/scorpiontrader16-ai/youtuop-1/services/search/internal/postgres"
 )
 
 var version = "dev"

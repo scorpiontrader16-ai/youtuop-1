@@ -1,4 +1,4 @@
-module github.com/aminpola2001-ctrl/youtuop/services/analytics
+module github.com/scorpiontrader16-ai/youtuop-1/services/analytics
 
 go 1.24.0
 

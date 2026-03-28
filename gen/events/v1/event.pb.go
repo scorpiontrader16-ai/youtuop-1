@@ -258,7 +258,7 @@ const file_events_v1_event_proto_rawDesc = "" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12=\n" +
-	"\fprocessed_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vprocessedAtB=Z;github.com/aminpola2001-ctrl/youtuop/gen/events/v1;eventsv1b\x06proto3"
+	"\fprocessed_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vprocessedAtB=Z;github.com/scorpiontrader16-ai/youtuop-1/gen/events/v1;eventsv1b\x06proto3"
 
 var (
 	file_events_v1_event_proto_rawDescOnce sync.Once

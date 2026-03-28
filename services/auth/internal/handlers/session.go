@@ -7,7 +7,7 @@ import (
     "github.com/gorilla/mux"
     "go.uber.org/zap"
 
-    "github.com/aminpola2001-ctrl/youtuop/services/auth/internal/postgres"
+    "github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/postgres"
 )
 
 type SessionHandler struct {

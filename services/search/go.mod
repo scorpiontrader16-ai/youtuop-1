@@ -1,4 +1,4 @@
-module github.com/aminpola2001-ctrl/youtuop/services/search
+module github.com/scorpiontrader16-ai/youtuop-1/services/search
 
 go 1.24.0
 

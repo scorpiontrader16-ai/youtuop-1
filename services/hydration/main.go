@@ -17,8 +17,8 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	eventsv1    "github.com/aminpola2001-ctrl/youtuop/gen/events/v1"
-	processingv1 "github.com/aminpola2001-ctrl/youtuop/gen/processing/v1"
+	eventsv1    "github.com/scorpiontrader16-ai/youtuop-1/gen/events/v1"
+	processingv1 "github.com/scorpiontrader16-ai/youtuop-1/gen/processing/v1"
 )
 
 type Config struct {

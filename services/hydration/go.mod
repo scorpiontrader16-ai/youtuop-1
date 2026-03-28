@@ -3,7 +3,7 @@ module github.com/scorpiontrader16-ai/youtuop-1/services/hydration
 go 1.24.0
 
 require (
-	github.com/aminpola2001-ctrl/youtuop v0.0.0-00010101000000-000000000000
+	github.com/scorpiontrader16-ai/youtuop-1 v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 )
@@ -15,5 +15,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 )
 
-replace github.com/aminpola2001-ctrl/youtuop => ../..
+replace github.com/scorpiontrader16-ai/youtuop-1 => ../..
 toolchain go1.24.13

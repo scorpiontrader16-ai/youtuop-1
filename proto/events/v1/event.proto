@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package events.v1;
 
-option go_package = "github.com/aminpola2001-ctrl/youtuop/gen/events/v1;eventsv1";
+option go_package = "github.com/scorpiontrader16-ai/youtuop-1/gen/events/v1;eventsv1";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";

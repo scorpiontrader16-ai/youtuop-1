@@ -3,7 +3,7 @@ package middleware
 import (
     "net/http"
 
-    "github.com/aminpola2001-ctrl/youtuop/services/auth/internal/postgres"
+    "github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/postgres"
 )
 
 // TenantContextMiddleware sets PostgreSQL session variable app.tenant_id

@@ -1,4 +1,4 @@
-module github.com/aminpola2001-ctrl/youtuop
+module github.com/scorpiontrader16-ai/youtuop-1
 
 go 1.24.0
 

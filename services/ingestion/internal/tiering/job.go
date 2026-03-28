@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/coldstore"
-	"github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/postgres"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/ingestion/internal/coldstore"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/ingestion/internal/postgres"
 )
 
 const (

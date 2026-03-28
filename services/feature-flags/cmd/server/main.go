@@ -21,8 +21,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/zap"
 
-	"github.com/aminpola2001-ctrl/youtuop/services/feature-flags/internal/evaluator"
-	"github.com/aminpola2001-ctrl/youtuop/services/feature-flags/internal/postgres"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/feature-flags/internal/evaluator"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/feature-flags/internal/postgres"
 )
 
 var version = "dev"

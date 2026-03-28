@@ -20,8 +20,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/zap"
 
-	"github.com/aminpola2001-ctrl/youtuop/services/notifications/internal/postgres"
-	resendclient "github.com/aminpola2001-ctrl/youtuop/services/notifications/internal/resend"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/notifications/internal/postgres"
+	resendclient "github.com/scorpiontrader16-ai/youtuop-1/services/notifications/internal/resend"
 )
 
 var version = "dev"

@@ -37,11 +37,11 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
-	chwriter "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/clickhouse"
-	"github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/coldstore"
-	kafkapkg "github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/kafka"
-	"github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/postgres"
-	"github.com/aminpola2001-ctrl/youtuop/services/ingestion/internal/tiering"
+	chwriter "github.com/scorpiontrader16-ai/youtuop-1/services/ingestion/internal/clickhouse"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/ingestion/internal/coldstore"
+	kafkapkg "github.com/scorpiontrader16-ai/youtuop-1/services/ingestion/internal/kafka"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/ingestion/internal/postgres"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/ingestion/internal/tiering"
 )
 
 var version = "dev"

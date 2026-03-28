@@ -1,4 +1,4 @@
-module github.com/aminpola2001-ctrl/youtuop/services/realtime
+module github.com/scorpiontrader16-ai/youtuop-1/services/realtime
 
 go 1.24.0
 

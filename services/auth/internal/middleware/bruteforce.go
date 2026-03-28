@@ -5,7 +5,7 @@ import (
     "net/http"
     "time"
 
-    "github.com/aminpola2001-ctrl/youtuop/services/auth/internal/postgres"
+    "github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/postgres"
 )
 
 type BruteForceProtection struct {

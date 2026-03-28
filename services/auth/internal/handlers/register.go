@@ -4,7 +4,7 @@ import (
     "encoding/json"
     "net/http"
 
-    "github.com/aminpola2001-ctrl/youtuop/services/auth/internal/postgres"
+    "github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/postgres"
     "go.uber.org/zap"
     "golang.org/x/crypto/bcrypt"
 )

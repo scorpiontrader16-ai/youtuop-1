@@ -22,8 +22,8 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.uber.org/zap"
 
-	"github.com/aminpola2001-ctrl/youtuop/services/realtime/internal/consumer"
-	"github.com/aminpola2001-ctrl/youtuop/services/realtime/internal/hub"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/realtime/internal/consumer"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/realtime/internal/hub"
 )
 
 var version = "dev"

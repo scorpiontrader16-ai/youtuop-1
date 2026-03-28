@@ -1,4 +1,4 @@
-module github.com/aminpola2001-ctrl/youtuop/services/control-plane
+module github.com/scorpiontrader16-ai/youtuop-1/services/control-plane
 
 go 1.24.0
 

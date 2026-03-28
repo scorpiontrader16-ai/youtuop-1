@@ -11,7 +11,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 
-	"github.com/aminpola2001-ctrl/youtuop/services/realtime/internal/hub"
+	"github.com/scorpiontrader16-ai/youtuop-1/services/realtime/internal/hub"
 )
 
 // Config لـ Redpanda consumer

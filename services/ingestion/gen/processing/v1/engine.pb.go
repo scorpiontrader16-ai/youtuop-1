@@ -7,7 +7,7 @@
 package processingv1
 
 import (
-	v1 "github.com/aminpola2001-ctrl/youtuop/gen/events/v1"
+	v1 "github.com/scorpiontrader16-ai/youtuop-1/gen/events/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -813,7 +813,7 @@ const file_processing_v1_engine_proto_rawDesc = "" +
 	"\fProcessEvent\x12\".processing.v1.ProcessEventRequest\x1a#.processing.v1.ProcessEventResponse\x12\\\n" +
 	"\rProcessStream\x12\".processing.v1.ProcessEventRequest\x1a#.processing.v1.ProcessEventResponse(\x010\x01\x12[\n" +
 	"\x12ComputeCorrelation\x12!.processing.v1.CorrelationRequest\x1a\".processing.v1.CorrelationResponse\x12M\n" +
-	"\x0eExtractSignals\x12\x1c.processing.v1.SignalRequest\x1a\x1d.processing.v1.SignalResponseBEZCgithub.com/aminpola2001-ctrl/youtuop/gen/processing/v1;processingv1b\x06proto3"
+	"\x0eExtractSignals\x12\x1c.processing.v1.SignalRequest\x1a\x1d.processing.v1.SignalResponseBEZCgithub.com/scorpiontrader16-ai/youtuop-1/gen/processing/v1;processingv1b\x06proto3"
 
 var (
 	file_processing_v1_engine_proto_rawDescOnce sync.Once

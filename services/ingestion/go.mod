@@ -1,4 +1,4 @@
-module github.com/aminpola2001-ctrl/youtuop/services/ingestion
+module github.com/scorpiontrader16-ai/youtuop-1/services/ingestion
 
 go 1.24.0
 
@@ -6,7 +6,7 @@ toolchain go1.24.13
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.23.2
-	github.com/aminpola2001-ctrl/youtuop v0.0.0-00010101000000-000000000000
+	github.com/scorpiontrader16-ai/youtuop-1 v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/minio/minio-go/v7 v7.0.70
 	github.com/parquet-go/parquet-go v0.23.0
@@ -76,4 +76,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/aminpola2001-ctrl/youtuop => ../../
+replace github.com/scorpiontrader16-ai/youtuop-1 => ../../
