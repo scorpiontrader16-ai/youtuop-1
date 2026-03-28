@@ -52,7 +52,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -140,7 +139,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -228,7 +226,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -316,7 +313,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -404,7 +400,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -491,7 +486,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -568,7 +562,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -645,7 +638,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -722,7 +714,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -799,7 +790,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -876,7 +866,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -953,7 +942,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -1030,7 +1018,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -1107,7 +1094,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -1184,7 +1170,6 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
         with:
-          cosign-release: 'v2.4.1'
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
