@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 
 import boto3
 import joblib
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
