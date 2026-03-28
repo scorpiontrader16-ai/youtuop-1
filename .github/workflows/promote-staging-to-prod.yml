@@ -150,15 +150,9 @@ jobs:
 
           # GHCR OCI Registry API — لا يحتاج docker login
           # يُرجع 200 إذا وُجد الـ manifest، 401/404 إذا لم يُوجد
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.oci.image.manifest.v1+json" \
-            "https://ghcr.io/v2/${ORG}/${REPO}/${SERVICE}/manifests/${VERSION}")
-
-          echo "GHCR API: ${ORG}/${REPO}/${SERVICE}:${VERSION} -> HTTP ${HTTP_STATUS}"
-
-          if [ "${HTTP_STATUS}" != "200" ]; then
-            echo "::error::Image not found in GHCR: ghcr.io/${ORG}/${REPO}/${SERVICE}:${VERSION} (HTTP ${HTTP_STATUS})"
+          echo "Verifying image: ghcr.io/${ORG}/${REPO}/${SERVICE}:${VERSION}"
+          if ! gh api "/users/${ORG}/packages/container/${REPO}%2F${SERVICE}/versions" --jq ".[].metadata.container.tags[]" 2>/dev/null | grep -q "^${VERSION}$"; then
+            echo "::error::Image not found in GHCR: ghcr.io/${ORG}/${REPO}/${SERVICE}:${VERSION}"
             echo "::error::Run release.yml first to build and push this version."
             exit 1
           fi
