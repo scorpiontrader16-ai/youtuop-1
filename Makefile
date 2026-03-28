@@ -139,3 +139,44 @@ tiering-run: ## Run tiering job manually (ClickHouse → MinIO)
 lint: ## Run all linters (Go + Rust)
 	cd services/ingestion && golangci-lint run ./...
 	cd services/processing && cargo clippy -- -D warnings
+
+# ─── Per-Service Database Migrations ──────────────────────────────
+# Each service owns its own migration sequence (isolated databases).
+# Global numbering reflects creation order across all services.
+.PHONY: db-migrate-auth db-migrate-control-plane db-migrate-developer-portal \
+        db-migrate-feature-flags db-migrate-notifications db-migrate-all
+
+db-migrate-auth: ## Run auth service migrations
+	GOOSE_MIGRATION_DIR=./services/auth/internal/postgres/migrations \
+	GOOSE_DBSTRING=$(POSTGRES_DSN) \
+	bash ./scripts/migrate.sh up
+
+db-migrate-control-plane: ## Run control-plane service migrations
+	GOOSE_MIGRATION_DIR=./services/control-plane/internal/postgres/migrations \
+	GOOSE_DBSTRING=$(POSTGRES_DSN) \
+	bash ./scripts/migrate.sh up
+
+db-migrate-developer-portal: ## Run developer-portal service migrations
+	GOOSE_MIGRATION_DIR=./services/developer-portal/internal/postgres/migrations \
+	GOOSE_DBSTRING=$(POSTGRES_DSN) \
+	bash ./scripts/migrate.sh up
+
+db-migrate-feature-flags: ## Run feature-flags service migrations
+	GOOSE_MIGRATION_DIR=./services/feature-flags/internal/postgres/migrations \
+	GOOSE_DBSTRING=$(POSTGRES_DSN) \
+	bash ./scripts/migrate.sh up
+
+db-migrate-notifications: ## Run notifications service migrations
+	GOOSE_MIGRATION_DIR=./services/notifications/internal/postgres/migrations \
+	GOOSE_DBSTRING=$(POSTGRES_DSN) \
+	bash ./scripts/migrate.sh up
+
+db-migrate-all: ## Run ALL service migrations in dependency order
+	@echo "Running migrations for all services..."
+	@$(MAKE) db-migrate
+	@$(MAKE) db-migrate-auth
+	@$(MAKE) db-migrate-notifications
+	@$(MAKE) db-migrate-control-plane
+	@$(MAKE) db-migrate-feature-flags
+	@$(MAKE) db-migrate-developer-portal
+	@echo "✅ All service migrations complete"

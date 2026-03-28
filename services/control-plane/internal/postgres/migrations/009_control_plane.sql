@@ -1,3 +1,5 @@
+-- Scope: control-plane service database only — independent migration sequence
+-- Global numbering reflects creation order across all services
 -- ============================================================
 -- 009_control_plane.sql
 -- M15 Control Plane — system config + kill switches

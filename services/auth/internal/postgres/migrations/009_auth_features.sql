@@ -1,3 +1,8 @@
+-- ============================================================
+-- services/auth/internal/postgres/migrations/009_auth_features.sql
+-- Scope: auth service database only — independent migration sequence
+-- Global numbering reflects creation order across all services
+-- ============================================================
 -- +goose Up
 -- +goose StatementBegin
 
