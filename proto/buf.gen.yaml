@@ -1,5 +1,4 @@
 version: v2
-
 plugins:
   - remote: buf.build/protocolbuffers/go
     out: ../gen
@@ -9,25 +8,13 @@ plugins:
     out: ../gen
     opt:
       - paths=source_relative
-  - remote: buf.build/protocolbuffers/go
-    out: ../services/ingestion/gen
-    opt:
-      - paths=source_relative
-
-  - remote: buf.build/grpc/go
-    out: ../services/ingestion/gen
-    opt:
-      - paths=source_relative
-
   - remote: buf.build/community/neoeinstein-prost
     out: ../services/processing/src/gen
     opt:
       - compile_well_known_types=true
-
   - remote: buf.build/community/neoeinstein-tonic
     out: ../services/processing/src/gen
     opt:
       - compile_well_known_types=true
-
 inputs:
   - directory: .
