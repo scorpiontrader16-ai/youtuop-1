@@ -24,6 +24,7 @@ on:
       - 'services/search/**'
       - 'services/tenant-operator/**'
       - 'services/ml-engine/**'
+      - 'services/data-quality/**'
       - 'proto/**'
 
 concurrency:
