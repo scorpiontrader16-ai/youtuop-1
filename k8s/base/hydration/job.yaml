@@ -54,13 +54,3 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: hydration
-  namespace: platform
-  labels:
-    app: hydration
-# مش محتاج يماونت الـ service account token
-automountServiceAccountToken: false
