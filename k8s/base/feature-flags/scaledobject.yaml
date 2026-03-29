@@ -10,7 +10,7 @@ spec:
     apiVersion: argoproj.io/v1alpha1
     kind: Rollout
     name: feature-flags
-  minReplicaCount: 3
+  minReplicaCount: 0
   maxReplicaCount: 15
   cooldownPeriod: 60
   triggers:

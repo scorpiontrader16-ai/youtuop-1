@@ -6,7 +6,7 @@ metadata:
 spec:
   scaleTargetRef:
     name: analytics
-  minReplicaCount: 2
+  minReplicaCount: 0
   maxReplicaCount: 10
   triggers:
     - type: prometheus

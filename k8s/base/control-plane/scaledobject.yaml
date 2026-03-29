@@ -8,7 +8,7 @@ metadata:
 spec:
   scaleTargetRef:
     name: control-plane
-  minReplicaCount: 1
+  minReplicaCount: 0
   maxReplicaCount: 1
   triggers:
     - type: prometheus

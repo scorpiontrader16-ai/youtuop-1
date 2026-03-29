@@ -10,7 +10,7 @@ spec:
     apiVersion: argoproj.io/v1alpha1
     kind: Rollout
     name: billing
-  minReplicaCount: 3
+  minReplicaCount: 1
   maxReplicaCount: 10
   cooldownPeriod: 300
   triggers:

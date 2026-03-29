@@ -12,8 +12,7 @@ spec:
     apiVersion: argoproj.io/v1alpha1
     kind: Rollout
     name: processing
-  # minReplicaCount=2 للـ HA — processing لازم يكون شغال دايماً
-  minReplicaCount: 2
+  minReplicaCount: 0
   maxReplicaCount: 10
   cooldownPeriod: 300
   triggers:
