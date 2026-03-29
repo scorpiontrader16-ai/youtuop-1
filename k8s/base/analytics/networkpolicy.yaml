@@ -20,3 +20,11 @@ spec:
       ports:
         - port: 9096
           protocol: TCP
+    # ── من monitoring للـ metrics scraping ─────────────────
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9096
+          protocol: TCP

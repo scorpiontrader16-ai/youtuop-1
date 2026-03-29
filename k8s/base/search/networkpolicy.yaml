@@ -22,3 +22,13 @@ spec:
           protocol: TCP
         - port: 8095
           protocol: TCP
+    # ── من monitoring للـ metrics scraping ─────────────────
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8095
+          protocol: TCP
+        - port: 9095
+          protocol: TCP
