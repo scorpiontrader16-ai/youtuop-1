@@ -152,3 +152,251 @@ spec:
         - record: slo:ingestion:throughput1m
           expr: |
             sum(rate(ingestion_events_processed_total[1m]))
+
+    # ── Auth Service Availability SLO ──────────────────────
+    # Target: 99.95% availability (21.9 min downtime/month)
+    # Auth is critical path — higher target than other services
+    - name: slo.auth.availability
+      interval: 30s
+      rules:
+
+        - record: slo:auth:error_rate5m
+          expr: |
+            sum(rate(auth_login_total{status=~"5.."}[5m]))
+            /
+            sum(rate(auth_login_total[5m]))
+
+        - record: slo:auth:availability1h
+          expr: |
+            1 - (
+              sum(increase(auth_login_total{status=~"5.."}[1h]))
+              /
+              sum(increase(auth_login_total[1h]))
+            )
+
+        - record: slo:auth:availability30d
+          expr: |
+            1 - (
+              sum(increase(auth_login_total{status=~"5.."}[30d]))
+              /
+              sum(increase(auth_login_total[30d]))
+            )
+
+        - alert: AuthSLOFastBurn
+          expr: |
+            slo:auth:error_rate5m > (14.4 * 0.0005)
+          for: 5m
+          labels:
+            severity: critical
+            slo: auth-availability
+          annotations:
+            summary: "Auth SLO fast burn — availability at risk"
+            description: >
+              Auth error rate {{ $value | humanizePercentage }} is 14.4x the SLO budget.
+              Monthly error budget will be exhausted in ~1 hour.
+
+        - alert: AuthSLOSlowBurn
+          expr: |
+            (
+              sum(rate(auth_login_total{status=~"5.."}[6h]))
+              /
+              sum(rate(auth_login_total[6h]))
+            ) > (6 * 0.0005)
+          for: 30m
+          labels:
+            severity: warning
+            slo: auth-availability
+          annotations:
+            summary: "Auth SLO slow burn — budget being consumed"
+            description: >
+              Auth error rate over 6h is 6x the SLO budget.
+
+    # ── Auth Latency SLO ───────────────────────────────────
+    # Target: 99% of requests < 100ms (auth is on critical path)
+    - name: slo.auth.latency
+      interval: 30s
+      rules:
+
+        - record: slo:auth:latency_p99_5m
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(auth_http_request_duration_seconds_bucket[5m])) by (le)
+            )
+
+        - alert: AuthLatencySLOBreach
+          expr: |
+            slo:auth:latency_p99_5m > 0.1
+          for: 10m
+          labels:
+            severity: critical
+            slo: auth-latency
+          annotations:
+            summary: "Auth P99 latency SLO breach"
+            description: "Auth P99 latency is {{ $value }}s — SLO target is < 100ms."
+
+    # ── Analytics Service Availability SLO ────────────────
+    # Target: 99.5% availability
+    - name: slo.analytics.availability
+      interval: 30s
+      rules:
+
+        - record: slo:analytics:error_rate5m
+          expr: |
+            sum(rate(analytics_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(analytics_http_requests_total[5m]))
+
+        - record: slo:analytics:availability30d
+          expr: |
+            1 - (
+              sum(increase(analytics_http_requests_total{status=~"5.."}[30d]))
+              /
+              sum(increase(analytics_http_requests_total[30d]))
+            )
+
+        - alert: AnalyticsSLOFastBurn
+          expr: |
+            slo:analytics:error_rate5m > (14.4 * 0.005)
+          for: 5m
+          labels:
+            severity: warning
+            slo: analytics-availability
+          annotations:
+            summary: "Analytics SLO fast burn"
+            description: >
+              Analytics error rate {{ $value | humanizePercentage }} is 14.4x the SLO budget.
+
+    # ── ML Engine SLO ──────────────────────────────────────
+    # Target: 99% availability, P99 latency < 500ms
+    - name: slo.ml-engine.availability
+      interval: 30s
+      rules:
+
+        - record: slo:ml_engine:error_rate5m
+          expr: |
+            sum(rate(ml_engine_predictions_total{status="error"}[5m]))
+            /
+            sum(rate(ml_engine_predictions_total[5m]))
+
+        - record: slo:ml_engine:availability30d
+          expr: |
+            1 - (
+              sum(increase(ml_engine_predictions_total{status="error"}[30d]))
+              /
+              sum(increase(ml_engine_predictions_total[30d]))
+            )
+
+        - record: slo:ml_engine:latency_p99_5m
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(ml_engine_prediction_latency_seconds_bucket[5m])) by (le)
+            )
+
+        - alert: MLEngineSLOFastBurn
+          expr: |
+            slo:ml_engine:error_rate5m > (14.4 * 0.01)
+          for: 5m
+          labels:
+            severity: warning
+            slo: ml-engine-availability
+          annotations:
+            summary: "ML Engine SLO fast burn"
+            description: >
+              ML Engine error rate {{ $value | humanizePercentage }} is 14.4x the SLO budget.
+
+        - alert: MLEngineLatencySLOBreach
+          expr: |
+            slo:ml_engine:latency_p99_5m > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            slo: ml-engine-latency
+          annotations:
+            summary: "ML Engine P99 latency SLO breach"
+            description: "ML Engine P99 prediction latency is {{ $value }}s — target < 500ms."
+
+    # ── Search Service SLO ─────────────────────────────────
+    # Target: 99.5% availability, P95 < 300ms
+    - name: slo.search.availability
+      interval: 30s
+      rules:
+
+        - record: slo:search:error_rate5m
+          expr: |
+            sum(rate(search_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(search_http_requests_total[5m]))
+
+        - record: slo:search:latency_p95_5m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(search_http_request_duration_seconds_bucket[5m])) by (le)
+            )
+
+        - alert: SearchSLOFastBurn
+          expr: |
+            slo:search:error_rate5m > (14.4 * 0.005)
+          for: 5m
+          labels:
+            severity: warning
+            slo: search-availability
+          annotations:
+            summary: "Search SLO fast burn"
+            description: >
+              Search error rate {{ $value | humanizePercentage }} is 14.4x the SLO budget.
+
+        - alert: SearchLatencySLOBreach
+          expr: |
+            slo:search:latency_p95_5m > 0.3
+          for: 10m
+          labels:
+            severity: warning
+            slo: search-latency
+          annotations:
+            summary: "Search P95 latency SLO breach"
+            description: "Search P95 latency is {{ $value }}s — target < 300ms."
+
+    # ── Realtime Service SLO ───────────────────────────────
+    # Target: WebSocket connection error rate < 1%
+    - name: slo.realtime.availability
+      interval: 30s
+      rules:
+
+        - record: slo:realtime:error_rate5m
+          expr: |
+            sum(rate(realtime_connection_errors_total[5m]))
+            /
+            (sum(rate(realtime_messages_delivered_total[5m])) + 1)
+
+        - alert: RealtimeSLOFastBurn
+          expr: |
+            slo:realtime:error_rate5m > (14.4 * 0.01)
+          for: 5m
+          labels:
+            severity: warning
+            slo: realtime-availability
+          annotations:
+            summary: "Realtime SLO fast burn"
+            description: >
+              Realtime connection error rate {{ $value | humanizePercentage }} is 14.4x the SLO budget.
+
+    # ── SLO Dashboard — Additional Records ─────────────────
+    - name: slo.dashboard.extended
+      interval: 60s
+      rules:
+
+        - record: slo:auth:error_budget_remaining
+          expr: |
+            1 - ((1 - slo:auth:availability30d) / 0.0005)
+
+        - record: slo:analytics:error_budget_remaining
+          expr: |
+            1 - ((1 - slo:analytics:availability30d) / 0.005)
+
+        - record: slo:ml_engine:error_budget_remaining
+          expr: |
+            1 - ((1 - slo:ml_engine:availability30d) / 0.01)
+
+        - record: slo:search:error_budget_remaining
+          expr: |
+            1 - ((1 - slo:search:availability30d) / 0.005)
