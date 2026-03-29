@@ -21,3 +21,5 @@ resources:
   - vmalert-rules-configmap.yaml
   - vmalert-deployment.yaml
   - vmalert-service.yaml
+  # ── Pyroscope Continuous Profiling ─────────────────────────────────────────
+  - pyroscope.yaml

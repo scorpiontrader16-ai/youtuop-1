@@ -1,0 +1,283 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Pyroscope — Continuous Profiling Server
+# لماذا: يجمع CPU + memory profiles من كل الـ services
+#        ويعرضها في Grafana مع correlation مع الـ traces
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pyroscope
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pyroscope
+    app.kubernetes.io/component: profiling
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyroscope
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pyroscope
+    app.kubernetes.io/component: profiling
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  selector:
+    app.kubernetes.io/name: pyroscope
+  ports:
+    - name: http
+      port: 4040
+      targetPort: 4040
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pyroscope
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pyroscope
+    app.kubernetes.io/component: profiling
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  replicas: 1
+  serviceName: pyroscope
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pyroscope
+        app.kubernetes.io/component: profiling
+        app.kubernetes.io/part-of: youtuop-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4040"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: pyroscope
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: pyroscope
+          image: grafana/pyroscope:1.7.0
+          ports:
+            - name: http
+              containerPort: 4040
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 4040
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 4040
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+            - name: config
+              mountPath: /etc/pyroscope
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: pyroscope-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pyroscope-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pyroscope
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+data:
+  config.yaml: |
+    storage:
+      backend: filesystem
+      filesystem:
+        dir: /data
+    server:
+      http_listen_port: 4040
+    scrape_configs: []
+EOFcat > k8s/base/monitoring/pyroscope.yaml << 'EOF'
+# ─────────────────────────────────────────────────────────────────────────────
+# Pyroscope — Continuous Profiling Server
+# لماذا: يجمع CPU + memory profiles من كل الـ services
+#        ويعرضها في Grafana مع correlation مع الـ traces
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pyroscope
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pyroscope
+    app.kubernetes.io/component: profiling
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyroscope
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pyroscope
+    app.kubernetes.io/component: profiling
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  selector:
+    app.kubernetes.io/name: pyroscope
+  ports:
+    - name: http
+      port: 4040
+      targetPort: 4040
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pyroscope
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pyroscope
+    app.kubernetes.io/component: profiling
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  replicas: 1
+  serviceName: pyroscope
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pyroscope
+        app.kubernetes.io/component: profiling
+        app.kubernetes.io/part-of: youtuop-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4040"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: pyroscope
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: pyroscope
+          image: grafana/pyroscope:1.7.0
+          ports:
+            - name: http
+              containerPort: 4040
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 4040
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 4040
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+            - name: config
+              mountPath: /etc/pyroscope
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: pyroscope-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pyroscope-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: pyroscope
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+data:
+  config.yaml: |
+    storage:
+      backend: filesystem
+      filesystem:
+        dir: /data
+    server:
+      http_listen_port: 4040
+    scrape_configs: []
