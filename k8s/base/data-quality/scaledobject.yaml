@@ -1,0 +1,26 @@
+# k8s/base/data-quality/scaledobject.yaml
+# لماذا: KEDA يوسّع الـ Deployment تلقائياً بناءً على prometheus metrics
+#        kind=Deployment لأن data-quality Python service لا يستخدم Argo Rollout
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: data-quality
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: data-quality
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: data-quality
+  minReplicaCount: 0
+  maxReplicaCount: 5
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://victoria-metrics.monitoring.svc.cluster.local:8428
+        metricName: data_quality_requests_per_second
+        query: sum(rate(data_quality_http_requests_total[2m]))
+        threshold: "10"

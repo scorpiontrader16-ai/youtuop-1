@@ -1,7 +1,11 @@
+# k8s/base/data-quality/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - serviceaccount.yaml
   - networkpolicy.yaml
+  - externalsecret.yaml
+  - poddisruptionbudget.yaml
+  - scaledobject.yaml
   - service.yaml
   - deployment.yaml

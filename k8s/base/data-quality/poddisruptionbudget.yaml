@@ -1,0 +1,16 @@
+# k8s/base/data-quality/poddisruptionbudget.yaml
+# لماذا: يمنع downtime كامل أثناء node maintenance أو rolling updates
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: data-quality
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: data-quality
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: data-quality

@@ -1,0 +1,17 @@
+# k8s/overlays/production/data-quality/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: production
+
+resources:
+  - ../../../base/data-quality
+
+images:
+  - name: ghcr.io/placeholder/data-quality
+    newName: ghcr.io/scorpiontrader16-ai/youtuop-1/data-quality
+    newTag: "0.1.0"
+
+commonLabels:
+  environment: production
+  app.kubernetes.io/managed-by: kustomize
