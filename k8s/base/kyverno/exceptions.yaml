@@ -24,6 +24,9 @@ spec:
             - monitoring
             - argocd
             - envoy-gateway-system
+            # ✏️ مُضاف — GAP-07: Vault يعمل بـ UID 100 ويحتاج write access
+            # لـ Raft storage — لا يمكنه الالتزام بـ readOnlyRootFilesystem
+            - vault
 ---
 # استثناء لـ mirrormaker2 — يحتاج write access
 apiVersion: kyverno.io/v2beta1

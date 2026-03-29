@@ -1,0 +1,219 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  Full path: k8s/base/vault/vault-auth-config.yaml                   ║
+# ║  Status: 🆕 New — GAP-07 Dynamic Secrets                            ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# الغرض:
+#   bootstrap الـ Vault Kubernetes auth method بعد تثبيت Vault عبر Terraform.
+#
+# التسلسل الإجباري قبل تطبيق هذا الملف:
+#   1. Vault مثبَّت ومُهيَّأ (terraform apply)
+#   2. Vault مُشغَّل وغير مُقفَّل (vault operator init → vault operator unseal)
+#   3. Root token محفوظ في:
+#      kubectl create secret generic vault-bootstrap-token \
+#        --namespace vault \
+#        --from-literal=token=<ROOT_TOKEN> \
+#        --from-literal=db_admin_user=vault_admin \
+#        --from-literal=db_admin_password=<DB_ADMIN_PASSWORD>
+#   4. DB vault_admin user موجود في Postgres (راجع scripts/vault-setup.sh)
+#
+# Architecture:
+#   ESO (external-secrets SA) → Vault kubernetes auth (role: platform-services)
+#   → policy: platform-secrets → database/creds/+ (dynamic credentials)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── ClusterRoleBinding: vault SA → system:auth-delegator ─────────────────────
+# Vault يحتاج TokenReview API لتحقق صحة الـ service account tokens
+# بدون هذا الـ binding سترفض الـ kubernetes auth جميع الطلبات بـ 403
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth-delegator
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: vault
+    namespace: vault
+
+---
+# ── ServiceAccount: vault-config-job ─────────────────────────────────────────
+# SA مخصص للـ Job فقط — مفصول عن vault server SA
+# automountServiceAccountToken: false لأن الـ Job يستخدم VAULT_TOKEN مباشرة
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-config-job
+  namespace: vault
+  labels:
+    app.kubernetes.io/name: vault-config-job
+    app.kubernetes.io/component: bootstrap
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+automountServiceAccountToken: false
+
+---
+# ── Job: vault-auth-config ────────────────────────────────────────────────────
+# ينفَّذ مرة واحدة بعد تثبيت Vault لـ bootstrap:
+#   1. kubernetes auth method
+#   2. platform-secrets policy (تسمح بقراءة database/creds/+)
+#   3. platform-services role (يربط external-secrets SA بالـ policy)
+#   4. database secrets engine + platform connection + per-service roles
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-auth-config
+  namespace: vault
+  labels:
+    app.kubernetes.io/name: vault-auth-config
+    app.kubernetes.io/component: bootstrap
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vault-auth-config
+        app.kubernetes.io/component: bootstrap
+        app.kubernetes.io/part-of: youtuop-platform
+    spec:
+      serviceAccountName: vault-config-job
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: vault-config
+          image: hashicorp/vault:1.15.6
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              echo "=== Vault Bootstrap Configuration ==="
+
+              # انتظار حتى يكون vault جاهزاً (unsealed + active)
+              echo "--- Waiting for vault to be ready..."
+              until vault status 2>/dev/null | grep -q "Sealed.*false"; do
+                echo "Vault not ready yet, retrying in 10s..."
+                sleep 10
+              done
+              echo "--- Vault is ready"
+
+              # ── 1. Kubernetes Auth Method ────────────────────────────────
+              echo "--- Enabling kubernetes auth method..."
+              if vault auth list | grep -q "kubernetes/"; then
+                echo "kubernetes auth already enabled — skipping"
+              else
+                vault auth enable kubernetes
+              fi
+
+              vault write auth/kubernetes/config \
+                kubernetes_host="https://kubernetes.default.svc:443"
+              echo "--- Kubernetes auth configured"
+
+              # ── 2. Database Secrets Engine ───────────────────────────────
+              echo "--- Enabling database secrets engine..."
+              if vault secrets list | grep -q "database/"; then
+                echo "database engine already enabled — skipping"
+              else
+                vault secrets enable database
+              fi
+
+              echo "--- Configuring postgres connection..."
+              vault write database/config/platform \
+                plugin_name=postgresql-database-plugin \
+                allowed_roles="auth-role,billing-role,analytics-role,control-plane-role,developer-portal-role,feature-flags-role,hydration-role,ingestion-role,jobs-role,ml-engine-role,notifications-role,processing-role,realtime-role,search-role,tenant-operator-role" \
+                connection_url="postgresql://{{username}}:{{password}}@postgres.platform.svc.cluster.local:5432/platform?sslmode=require" \
+                username="${VAULT_DB_ADMIN_USER}" \
+                password="${VAULT_DB_ADMIN_PASSWORD}"
+              echo "--- Postgres connection configured"
+
+              # ── 3. Per-Service DB Roles ──────────────────────────────────
+              echo "--- Creating per-service database roles..."
+              for SERVICE in auth billing analytics control-plane developer-portal feature-flags hydration ingestion jobs ml-engine notifications processing realtime search tenant-operator; do
+                PG_USER=$(echo "$SERVICE" | tr '-' '_')
+                vault write "database/roles/${SERVICE}-role" \
+                  db_name=platform \
+                  creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; GRANT ${PG_USER}_role TO \"{{name}}\";" \
+                  revocation_statements="DROP ROLE IF EXISTS \"{{name}}\";" \
+                  default_ttl="1h" \
+                  max_ttl="4h"
+              done
+              echo "--- Per-service roles created"
+
+              # ── 4. Policy: platform-secrets ──────────────────────────────
+              echo "--- Writing platform-secrets policy..."
+              vault policy write platform-secrets - <<'POLICY'
+              path "database/creds/+" {
+                capabilities = ["read"]
+              }
+              path "database/creds/+/renew" {
+                capabilities = ["update"]
+              }
+              POLICY
+              echo "--- Policy written"
+
+              # ── 5. Kubernetes Role: platform-services ────────────────────
+              echo "--- Creating kubernetes role platform-services..."
+              vault write auth/kubernetes/role/platform-services \
+                bound_service_account_names=external-secrets \
+                bound_service_account_namespaces=external-secrets \
+                policies=platform-secrets \
+                ttl=1h
+              echo "--- Role platform-services created"
+
+              echo "=== Vault Bootstrap Complete ==="
+          env:
+            - name: VAULT_ADDR
+              value: "http://vault.vault.svc.cluster.local:8200"
+            - name: VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vault-bootstrap-token
+                  key: token
+            - name: VAULT_DB_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: vault-bootstrap-token
+                  key: db_admin_user
+            - name: VAULT_DB_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vault-bootstrap-token
+                  key: db_admin_password
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

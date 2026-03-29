@@ -1,6 +1,6 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  Full path: k8s/base/namespaces.yaml                                ║
-# ║  Status: ✏️ Modified — added falco namespace (PSS privileged)       ║
+# ║  Status: ✏️ Modified — added vault namespace (GAP-07 Dynamic Secrets)║
 # ╚══════════════════════════════════════════════════════════════════════╝
 apiVersion: v1
 kind: Namespace
@@ -28,5 +28,28 @@ metadata:
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/audit: privileged
     pod-security.kubernetes.io/warn: privileged
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
+---
+# ── HashiCorp Vault — Dynamic Secrets ────────────────────────────────────────
+# Vault يُدار بـ Terraform (infra/terraform/modules/vault/main.tf)
+# هذا الـ namespace يستضيف:
+#   • vault pods (HA Raft × 3، ARM64)
+#   • vault-auth-config Job (bootstrap kubernetes auth + policies)
+#
+# PSS baseline — الـ Vault Helm chart يشتغل بـ UID 100 (non-root)
+# لكنه يحتاج بعض المرونة في الـ volume mounts → baseline وليس restricted
+#
+# kyverno لا يُطبَّق على هذا الـ namespace (policies تستهدف platform فقط)
+# لذا الـ PSS هو الحاجز الأمني الوحيد هنا
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault
+  labels:
+    name: vault
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     app.kubernetes.io/part-of: youtuop-platform
     app.kubernetes.io/managed-by: kustomize

@@ -146,6 +146,42 @@ spec:
       - ServerSideApply=true
 
 ---
+
+# ── Wave -1: Vault Configuration ─────────────────────────────────────────────
+# يُطبَّق في نفس wave الـ kyverno-policies وenvoy-gateway
+# vault نفسه مُثبَّت عبر Terraform — هذا الـ Application يُطبِّق:
+#   - ClusterRoleBinding (vault → system:auth-delegator)
+#   - ServiceAccount (vault-config-job)
+#   - Job (vault-auth-config) كـ PostSync hook
+# prune: false — يمنع حذف الـ ClusterRoleBinding عند sync خاطئ
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault-config
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/component: secrets-management
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/scorpiontrader16-ai/youtuop-1.git
+    targetRevision: main
+    path: k8s/base/vault
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vault
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+
+---
 # ── Wave 0: API Gateway (HTTPRoute + Gateway resources) ───────────────────────
 apiVersion: argoproj.io/v1alpha1
 kind: Application
