@@ -21,3 +21,9 @@ resources:
   - security-policy-search.yaml
   - security-policy-analytics.yaml
   - security-policy-jobs.yaml
+  # -- routes and policies added below (were orphaned) --
+  - backend-traffic-policy-ratelimit.yaml
+  - http-route-admin.yaml
+  - http-route-feature-flags.yaml
+  - http-route-ml-engine.yaml
+  - security-policy-feature-flags.yaml

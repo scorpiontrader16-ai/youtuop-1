@@ -1,7 +1,4 @@
-# ╔══════════════════════════════════════════════════════════════════════╗
-# ║  المسار الكامل: k8s/base/auth/kustomization.yaml                
-# ║  الحالة: ✏️ معدل — تم إضافة certificate.yaml                       ║
-# ╚══════════════════════════════════════════════════════════════════════╝
+# k8s/base/hydration/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
@@ -13,3 +10,4 @@ resources:
   - service.yaml
   - scaledobject.yaml
   - certificate.yaml
+  - job.yaml
