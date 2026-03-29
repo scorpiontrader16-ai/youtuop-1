@@ -55,7 +55,7 @@ find . -not -path "./.git/*" -not -path "./vendor/*" -name "go.mod" | sort | whi
   if [ -z "$OUT" ]; then pass "go build OK: $DIR"; else fail "go build FAILED: $DIR"; echo "$OUT" >> "$REPORT"; fi
   OUT=$(cd "$DIR" && go vet ./... 2>&1 || true)
   if [ -z "$OUT" ]; then pass "go vet OK: $DIR"; else fail "go vet issues: $DIR"; echo "$OUT" >> "$REPORT"; fi
-  if [ -f "$DIR/Dockerfile" ]; then pass "Dockerfile present: $DIR"; else fail "Dockerfile MISSING: $DIR"; fi
+  if [ -f "$DIR/Dockerfile" ] || [ -f "$DIR/Dockerfile.arm64" ]; then pass "Dockerfile present: $DIR"; else fail "Dockerfile MISSING: $DIR"; fi
 done
 
 section "4. Rust Services"
