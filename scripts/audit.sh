@@ -2062,3 +2062,623 @@ echo "════════════════════════�
 echo "PASS=$PASS | FAIL=$FAIL | WARN=$WARN | TOTAL=$TOTAL"
 echo "Report: $REPORT"
 echo "════════════════════════════════════════════════════════════"
+#!/usr/bin/env bash
+# =============================================================================
+# repo_audit.sh — Institutional Efficiency Audit
+# Usage: bash repo_audit.sh [repo_root]
+# Output: audit_report.md in current directory
+# =============================================================================
+set -euo pipefail
+
+REPO="${1:-.}"
+REPORT="audit_report.md"
+SCORE_CRITICAL=0
+SCORE_HIGH=0
+SCORE_MEDIUM=0
+SCORE_LOW=0
+
+cd "$REPO"
+
+# ── Colours ──────────────────────────────────────────────────────────────────
+RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'
+CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+log()      { echo -e "${CYAN}[audit]${RESET} $*"; }
+section()  { echo -e "\n${BOLD}━━━ $* ━━━${RESET}"; }
+finding()  {
+  local level="$1"; local title="$2"; local detail="$3"; local fix="$4"
+  case "$level" in
+    CRITICAL) SCORE_CRITICAL=$((SCORE_CRITICAL+1)); echo -e "${RED}  ✗ [CRITICAL]${RESET} $title" ;;
+    HIGH)     SCORE_HIGH=$((SCORE_HIGH+1));         echo -e "${RED}  ✗ [HIGH]${RESET} $title" ;;
+    MEDIUM)   SCORE_MEDIUM=$((SCORE_MEDIUM+1));     echo -e "${YELLOW}  ⚠ [MEDIUM]${RESET} $title" ;;
+    LOW)      SCORE_LOW=$((SCORE_LOW+1));           echo -e "${GREEN}  ℹ [LOW]${RESET} $title" ;;
+  esac
+  {
+    echo "### [$level] $title"
+    echo ""
+    echo "**Where:** $detail"
+    echo ""
+    echo "**Fix:** $fix"
+    echo ""
+    echo "---"
+    echo ""
+  } >> "$REPORT"
+}
+ok() { echo -e "${GREEN}  ✓${RESET} $*"; }
+
+# ── Init report ───────────────────────────────────────────────────────────────
+{
+  echo "# Institutional Efficiency Audit Report"
+  echo ""
+  echo "> Generated: $(date '+%Y-%m-%d %H:%M:%S')"
+  echo "> Repo: $(pwd)"
+  echo ""
+  echo "---"
+  echo ""
+} > "$REPORT"
+
+
+# =============================================================================
+# 1. SECURITY
+# =============================================================================
+section "1 · SECURITY"
+{
+  echo "## 1. Security"
+  echo ""
+} >> "$REPORT"
+
+log "Scanning for hardcoded secrets..."
+
+# Real secret patterns (not just the word "secret")
+SECRET_HITS=$(grep -rn \
+  -e 'password\s*=\s*"[^"]\{8,\}"' \
+  -e 'api_key\s*=\s*"[^"]\{10,\}"' \
+  -e 'secret\s*=\s*"[^"]{8,}"' \
+  -e 'token\s*=\s*"[A-Za-z0-9_\-]\{20,\}"' \
+  -e 'AKIA[0-9A-Z]\{16\}' \
+  -e 'sk-[a-zA-Z0-9]\{40,\}' \
+  --include="*.go" --include="*.py" --include="*.rs" \
+  --include="*.env" --include="*.yaml" --include="*.yml" \
+  --include="*.tf" --include="*.json" \
+  --exclude-dir=".git" --exclude-dir="vendor" --exclude-dir="node_modules" \
+  . 2>/dev/null | grep -v "_test\." | grep -v "example\|sample\|fake\|dummy\|placeholder" || true)
+
+if [ -n "$SECRET_HITS" ]; then
+  FILES=$(echo "$SECRET_HITS" | cut -d: -f1 | sort -u | tr '\n' ', ')
+  finding "CRITICAL" "Possible hardcoded credentials" \
+    "$FILES" \
+    "Move to environment variables or a secrets manager (Vault, AWS SSM, K8s Secrets). Rotate any real credentials immediately."
+else
+  ok "No obvious hardcoded credentials"
+fi
+
+# .env files committed
+ENV_COMMITTED=$(git ls-files | grep -E '\.env$|\.env\.' | grep -v '.env.example\|.env.sample' || true)
+if [ -n "$ENV_COMMITTED" ]; then
+  finding "CRITICAL" ".env files tracked by git" \
+    "$ENV_COMMITTED" \
+    "Add to .gitignore immediately. Run: git rm --cached <file>. Rotate any secrets that were exposed."
+else
+  ok ".env files not tracked"
+fi
+
+# .gitignore quality
+if [ ! -f .gitignore ]; then
+  finding "HIGH" "No .gitignore file" \
+    "repo root" \
+    "Add .gitignore covering: .env, *.key, *.pem, vendor/, __pycache__/, target/, dist/, *.tfstate"
+else
+  MISSING_IGNORES=()
+  grep -q '\.env' .gitignore            || MISSING_IGNORES+=(".env")
+  grep -q '\.tfstate' .gitignore        || MISSING_IGNORES+=("*.tfstate")
+  grep -q '\.pem\|\.key' .gitignore     || MISSING_IGNORES+=("*.pem / *.key")
+  if [ ${#MISSING_IGNORES[@]} -gt 0 ]; then
+    finding "HIGH" ".gitignore missing critical patterns" \
+      ".gitignore" \
+      "Add: ${MISSING_IGNORES[*]}"
+  else
+    ok ".gitignore covers critical patterns"
+  fi
+fi
+
+# Terraform state files
+TF_STATE=$(find . -name "*.tfstate" -not -path "*/.git/*" 2>/dev/null || true)
+if [ -n "$TF_STATE" ]; then
+  finding "CRITICAL" "Terraform state files on disk" \
+    "$TF_STATE" \
+    "Use remote state backend (S3+DynamoDB, GCS, Terraform Cloud). Remove local tfstate files and add to .gitignore."
+fi
+
+# Container images running as root
+DOCKERFILES=$(find . -name "Dockerfile*" -not -path "*/.git/*" 2>/dev/null || true)
+ROOT_CONTAINERS=()
+for df in $DOCKERFILES; do
+  if ! grep -q "^USER " "$df" 2>/dev/null; then
+    ROOT_CONTAINERS+=("$df")
+  fi
+done
+if [ ${#ROOT_CONTAINERS[@]} -gt 0 ]; then
+  finding "HIGH" "Containers running as root (no USER directive)" \
+    "${ROOT_CONTAINERS[*]}" \
+    "Add 'RUN addgroup -S app && adduser -S app -G app' and 'USER app' before ENTRYPOINT in each Dockerfile."
+else
+  ok "All Dockerfiles have USER directive"
+fi
+
+# Go modules — check for known vulnerability tool
+if find . -name "go.mod" | head -1 | grep -q .; then
+  if ! command -v govulncheck &>/dev/null; then
+    finding "MEDIUM" "govulncheck not available in PATH" \
+      "Go services" \
+      "Install: go install golang.org/x/vuln/cmd/govulncheck@latest  Then run: govulncheck ./... in each service."
+  else
+    ok "govulncheck available"
+  fi
+fi
+
+
+# =============================================================================
+# 2. CODE QUALITY
+# =============================================================================
+section "2 · CODE QUALITY"
+{
+  echo "## 2. Code Quality"
+  echo ""
+} >> "$REPORT"
+
+# ── Go ─────────────────────────────────────────────────────────────────────
+GO_MODS=$(find . -name "go.mod" -not -path "*/.git/*" -not -path "*/vendor/*" 2>/dev/null || true)
+if [ -n "$GO_MODS" ]; then
+  log "Auditing Go services..."
+
+  # Error handling: err ignored with _
+  ERR_IGNORED=$(grep -rn ", _\s*:= " --include="*.go" \
+    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
+    grep -v "_test\.go" | wc -l || echo "0")
+  if [ "$ERR_IGNORED" -gt 5 ]; then
+    finding "HIGH" "Go errors silently discarded (_, _ := pattern)" \
+      "$ERR_IGNORED occurrences across Go files" \
+      "Replace with proper error handling. Use 'golangci-lint run --enable errcheck' to find all instances."
+  fi
+
+  # panic() in non-test code
+  PANICS=$(grep -rn "panic(" --include="*.go" \
+    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
+    grep -v "_test\.go" | grep -v "//.*panic" | wc -l || echo "0")
+  if [ "$PANICS" -gt 0 ]; then
+    finding "HIGH" "panic() calls in production Go code" \
+      "$PANICS occurrences" \
+      "Replace panics with proper error returns. Reserve panic() only for truly unrecoverable startup failures."
+  fi
+
+  # TODO/FIXME/HACK count
+  TODO_COUNT=$(grep -rn "TODO\|FIXME\|HACK\|XXX" --include="*.go" \
+    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l || echo "0")
+  if [ "$TODO_COUNT" -gt 20 ]; then
+    finding "MEDIUM" "High TODO/FIXME debt in Go code" \
+      "$TODO_COUNT instances" \
+      "Triage: convert to GitHub Issues with proper labels, set milestone, or delete if stale."
+  fi
+
+  # Context propagation — functions with long signatures missing ctx
+  CTX_MISSING=$(grep -rn "^func " --include="*.go" \
+    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
+    grep -v "context\." | grep -v "func (.*) " | \
+    grep "db\|client\|repo\|service\|handler" | wc -l || echo "0")
+  if [ "$CTX_MISSING" -gt 3 ]; then
+    finding "MEDIUM" "Go functions with DB/client params possibly missing context.Context" \
+      "~$CTX_MISSING candidates — verify manually" \
+      "First param should be ctx context.Context for all I/O-bound functions to support cancellation and tracing."
+  fi
+
+  # golangci-lint
+  if ! command -v golangci-lint &>/dev/null; then
+    finding "MEDIUM" "golangci-lint not installed" \
+      "Go services" \
+      "Install: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest\nAdd to CI pipeline."
+  else
+    ok "golangci-lint available"
+  fi
+
+  # go.sum missing for any go.mod
+  for mod in $GO_MODS; do
+    dir=$(dirname "$mod")
+    if [ ! -f "$dir/go.sum" ]; then
+      finding "HIGH" "go.sum missing" \
+        "$dir" \
+        "Run: cd $dir && go mod tidy"
+    fi
+  done
+fi
+
+# ── Python ──────────────────────────────────────────────────────────────────
+PY_FILES=$(find . -name "*.py" -not -path "*/.git/*" -not -path "*/node_modules/*" 2>/dev/null | head -5 || true)
+if [ -n "$PY_FILES" ]; then
+  log "Auditing Python services..."
+
+  # requirements.txt without pinned versions
+  REQ_FILES=$(find . -name "requirements*.txt" -not -path "*/.git/*" 2>/dev/null || true)
+  for req in $REQ_FILES; do
+    UNPINNED=$(grep -E "^[a-zA-Z]" "$req" | grep -v "==" | grep -v "^#" | wc -l || echo "0")
+    if [ "$UNPINNED" -gt 2 ]; then
+      finding "HIGH" "Python dependencies without pinned versions" \
+        "$req ($UNPINNED unpinned)" \
+        "Pin all versions: pip freeze > requirements.txt  or use pip-compile from pip-tools."
+    fi
+  done
+
+  # bare except
+  BARE_EXCEPT=$(grep -rn "except:" --include="*.py" \
+    --exclude-dir=".git" . 2>/dev/null | wc -l || echo "0")
+  if [ "$BARE_EXCEPT" -gt 0 ]; then
+    finding "MEDIUM" "Bare except: clauses in Python (catches BaseException)" \
+      "$BARE_EXCEPT occurrences" \
+      "Replace with 'except SpecificException as e:' to avoid silently catching SystemExit, KeyboardInterrupt."
+  fi
+
+  # no type hints check
+  PY_UNTYPED=$(grep -rn "^def " --include="*.py" \
+    --exclude-dir=".git" . 2>/dev/null | grep -v "->" | wc -l || echo "0")
+  if [ "$PY_UNTYPED" -gt 10 ]; then
+    finding "LOW" "Python functions without return type annotations" \
+      "$PY_UNTYPED functions" \
+      "Add type hints progressively. Use mypy or pyright for enforcement. Start with public API functions."
+  fi
+fi
+
+# ── Rust ────────────────────────────────────────────────────────────────────
+RUST_FILES=$(find . -name "*.rs" -not -path "*/.git/*" 2>/dev/null | head -5 || true)
+if [ -n "$RUST_FILES" ]; then
+  log "Auditing Rust code..."
+
+  UNWRAP_COUNT=$(grep -rn "\.unwrap()" --include="*.rs" \
+    --exclude-dir=".git" --exclude-dir="target" . 2>/dev/null | \
+    grep -v "_test\|#\[test\]\|#\[cfg(test)\]" | wc -l || echo "0")
+  if [ "$UNWRAP_COUNT" -gt 5 ]; then
+    finding "HIGH" "Excessive .unwrap() calls in Rust (panics on None/Err)" \
+      "$UNWRAP_COUNT occurrences in non-test code" \
+      "Replace with .expect(\"meaningful message\") for debugging, or propagate with ? operator for production paths."
+  fi
+
+  CLONE_COUNT=$(grep -rn "\.clone()" --include="*.rs" \
+    --exclude-dir=".git" --exclude-dir="target" . 2>/dev/null | wc -l || echo "0")
+  if [ "$CLONE_COUNT" -gt 30 ]; then
+    finding "LOW" "High .clone() usage in Rust — possible performance cost" \
+      "$CLONE_COUNT occurrences" \
+      "Profile hot paths. Use Arc<T> for shared ownership, Cow<T> for conditional cloning, or restructure borrows."
+  fi
+fi
+
+
+# =============================================================================
+# 3. INFRASTRUCTURE
+# =============================================================================
+section "3 · INFRASTRUCTURE"
+{
+  echo "## 3. Infrastructure"
+  echo ""
+} >> "$REPORT"
+
+log "Auditing Kubernetes manifests..."
+
+K8S_FILES=$(find . -path "*/k8s/*" -name "*.yaml" -o -path "*/manifests/*" -name "*.yaml" \
+  2>/dev/null | grep -v ".git" || true)
+
+if [ -n "$K8S_FILES" ]; then
+
+  # Resource limits
+  MANIFESTS_NO_LIMITS=()
+  for f in $K8S_FILES; do
+    if grep -q "kind: Deployment\|kind: StatefulSet\|kind: DaemonSet" "$f" 2>/dev/null; then
+      if ! grep -q "limits:" "$f" 2>/dev/null; then
+        MANIFESTS_NO_LIMITS+=("$f")
+      fi
+    fi
+  done
+  if [ ${#MANIFESTS_NO_LIMITS[@]} -gt 0 ]; then
+    finding "HIGH" "K8s workloads missing resource limits (cpu/memory)" \
+      "${MANIFESTS_NO_LIMITS[*]}" \
+      "Add resources.limits.cpu and resources.limits.memory to every container spec. Prevents noisy-neighbour resource exhaustion."
+  else
+    ok "All K8s workloads have resource limits"
+  fi
+
+  # Liveness/readiness probes
+  MANIFESTS_NO_PROBES=()
+  for f in $K8S_FILES; do
+    if grep -q "kind: Deployment\|kind: StatefulSet" "$f" 2>/dev/null; then
+      if ! grep -q "livenessProbe\|readinessProbe" "$f" 2>/dev/null; then
+        MANIFESTS_NO_PROBES+=("$f")
+      fi
+    fi
+  done
+  if [ ${#MANIFESTS_NO_PROBES[@]} -gt 0 ]; then
+    finding "HIGH" "K8s Deployments missing liveness/readiness probes" \
+      "${MANIFESTS_NO_PROBES[*]}" \
+      "Add livenessProbe (restart on deadlock) and readinessProbe (remove from LB until healthy) to each container."
+  else
+    ok "All Deployments have health probes"
+  fi
+
+  # image: latest tag
+  LATEST_IMAGES=$(grep -rn "image:.*:latest\|image: [^:\"']*$" \
+    $K8S_FILES 2>/dev/null | grep -v "#" || true)
+  if [ -n "$LATEST_IMAGES" ]; then
+    finding "HIGH" "Container images using :latest or untagged" \
+      "$(echo "$LATEST_IMAGES" | cut -d: -f1 | sort -u | tr '\n' ' ')" \
+      "Pin image tags to immutable digests (sha256:...) or exact semver tags. :latest breaks reproducibility."
+  fi
+
+  # PodDisruptionBudget — any service without one?
+  SERVICES_WITH_PDB=$(grep -rl "kind: PodDisruptionBudget" ${K8S_FILES} 2>/dev/null | wc -l || echo "0")
+  DEPLOYMENTS=$(echo "$K8S_FILES" | xargs grep -l "kind: Deployment" 2>/dev/null | wc -l || echo "0")
+  if [ "$DEPLOYMENTS" -gt 0 ] && [ "$SERVICES_WITH_PDB" -eq 0 ]; then
+    finding "MEDIUM" "No PodDisruptionBudgets defined" \
+      "k8s/ directory" \
+      "Add PodDisruptionBudget for each stateful or critical service to prevent all pods being evicted during node drain."
+  fi
+
+  # NetworkPolicy
+  NET_POLICIES=$(grep -rl "kind: NetworkPolicy" ${K8S_FILES} 2>/dev/null | wc -l || echo "0")
+  if [ "$NET_POLICIES" -eq 0 ]; then
+    finding "MEDIUM" "No NetworkPolicies found — all pods can communicate freely" \
+      "k8s/ directory" \
+      "Implement NetworkPolicy deny-all default + explicit allow rules. Apply namespace-level isolation first."
+  fi
+
+else
+  log "No K8s manifests found — skipping K8s checks"
+fi
+
+log "Auditing Terraform..."
+
+TF_DIRS=$(find . -name "*.tf" -not -path "*/.git/*" -exec dirname {} \; 2>/dev/null | sort -u || true)
+if [ -n "$TF_DIRS" ]; then
+
+  for tfdir in $TF_DIRS; do
+    # backend.tf required for remote state
+    if ! ls "$tfdir"/backend.tf &>/dev/null; then
+      finding "HIGH" "Terraform directory missing backend.tf (local state risk)" \
+        "$tfdir" \
+        "Add backend.tf with S3/GCS/Terraform Cloud backend. Local state gets lost and can't be shared."
+    fi
+
+    # variables inline in main.tf
+    if grep -q "^variable " "$tfdir/main.tf" 2>/dev/null; then
+      finding "MEDIUM" "Terraform variables defined in main.tf (not variables.tf)" \
+        "$tfdir/main.tf" \
+        "Move all variable blocks to variables.tf. Keep main.tf for resources only."
+    fi
+
+    # Hardcoded regions or account IDs
+    if grep -rn '"us-east-1"\|"eu-west-1"\|"[0-9]\{12\}"' "$tfdir"/*.tf 2>/dev/null | grep -qv "variable\|#"; then
+      finding "MEDIUM" "Hardcoded AWS region or account ID in Terraform" \
+        "$tfdir" \
+        "Move to variables.tf or tfvars. Use data.aws_caller_identity.current.account_id for account IDs."
+    fi
+  done
+fi
+
+
+# =============================================================================
+# 4. CI/CD PIPELINE
+# =============================================================================
+section "4 · CI/CD PIPELINE"
+{
+  echo "## 4. CI/CD Pipeline"
+  echo ""
+} >> "$REPORT"
+
+log "Auditing CI/CD workflows..."
+
+WORKFLOW_DIR=".github/workflows"
+if [ -d "$WORKFLOW_DIR" ]; then
+
+  # Actions pinned to SHA vs mutable tag
+  UNPINNED_ACTIONS=$(grep -rn "uses:.*@" "$WORKFLOW_DIR"/*.yml "$WORKFLOW_DIR"/*.yaml 2>/dev/null | \
+    grep -v "@[a-f0-9]\{40\}" | \
+    grep -v "#.*sha\|# sha\|# pinned" | wc -l || echo "0")
+  if [ "$UNPINNED_ACTIONS" -gt 0 ]; then
+    finding "HIGH" "GitHub Actions not pinned to commit SHA" \
+      "$UNPINNED_ACTIONS action references using mutable tags (e.g. @v3)" \
+      "Pin every 'uses:' to a full 40-char SHA: actions/checkout@8ade135 → actions/checkout@<sha>. Use Dependabot to update."
+  else
+    ok "Actions pinned to SHAs"
+  fi
+
+  # Secrets printed in logs
+  SECRET_ECHO=$(grep -rn "echo.*\$\${{.*secrets\|echo.*\${{ secrets" "$WORKFLOW_DIR" 2>/dev/null || true)
+  if [ -n "$SECRET_ECHO" ]; then
+    finding "CRITICAL" "Secrets echoed to workflow logs" \
+      "$SECRET_ECHO" \
+      "Remove echo of secrets immediately. Use '::add-mask::' if a value must be computed from a secret."
+  fi
+
+  # Workflows with no timeout-minutes
+  NO_TIMEOUT=$(grep -rL "timeout-minutes:" "$WORKFLOW_DIR"/*.yml 2>/dev/null || true)
+  if [ -n "$NO_TIMEOUT" ]; then
+    finding "MEDIUM" "Workflows with no timeout-minutes (runaway jobs waste credits)" \
+      "$NO_TIMEOUT" \
+      "Add 'timeout-minutes: 30' (or appropriate value) at job level to prevent hung jobs burning CI budget."
+  fi
+
+  # No caching for package managers
+  HAS_CACHE=$(grep -rl "actions/cache\|cache:" "$WORKFLOW_DIR"/*.yml 2>/dev/null | wc -l || echo "0")
+  TOTAL_WORKFLOWS=$(ls "$WORKFLOW_DIR"/*.yml 2>/dev/null | wc -l || echo "0")
+  if [ "$TOTAL_WORKFLOWS" -gt 0 ] && [ "$HAS_CACHE" -eq 0 ]; then
+    finding "MEDIUM" "No dependency caching in any CI workflow" \
+      "$WORKFLOW_DIR" \
+      "Add actions/cache for go modules (~/.cache/go-build, ~/go/pkg/mod), pip (~/.cache/pip), cargo (~/.cargo). Typical 60-80% speedup."
+  fi
+
+  # Check all services have entries in release + sign workflows
+  if [ -f "$WORKFLOW_DIR/release.yml" ] && [ -f "$WORKFLOW_DIR/image-sign.yml" ]; then
+    SERVICES=$(ls -d services/*/ 2>/dev/null | xargs -I{} basename {} || true)
+    for svc in $SERVICES; do
+      if ! grep -q "$svc" "$WORKFLOW_DIR/release.yml" 2>/dev/null; then
+        finding "HIGH" "Service '$svc' missing from release.yml" \
+          "$WORKFLOW_DIR/release.yml" \
+          "Add build → cosign sign → SBOM → Grype scan → upload artifact pipeline block for $svc."
+      fi
+      if ! grep -q "$svc" "$WORKFLOW_DIR/image-sign.yml" 2>/dev/null; then
+        finding "HIGH" "Service '$svc' missing from image-sign.yml" \
+          "$WORKFLOW_DIR/image-sign.yml" \
+          "Add cosign signing entry for $svc to maintain full supply chain integrity."
+      fi
+    done
+  fi
+
+else
+  finding "HIGH" "No .github/workflows directory found" \
+    "repo root" \
+    "Set up CI/CD pipeline with at minimum: lint, test, build, security scan, and deploy workflows."
+fi
+
+
+# =============================================================================
+# 5. OBSERVABILITY
+# =============================================================================
+section "5 · OBSERVABILITY"
+{
+  echo "## 5. Observability"
+  echo ""
+} >> "$REPORT"
+
+log "Auditing observability coverage..."
+
+# Structured logging
+GO_LOGS=$(find . -name "*.go" -not -path "*/.git/*" -not -path "*/vendor/*" 2>/dev/null | head -20 || true)
+if [ -n "$GO_LOGS" ]; then
+  FMT_PRINTF=$(grep -rn "fmt\.Printf\|fmt\.Println\|log\.Printf\|log\.Println" --include="*.go" \
+    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
+    grep -v "_test\.go" | wc -l || echo "0")
+  if [ "$FMT_PRINTF" -gt 5 ]; then
+    finding "HIGH" "Unstructured logging in Go (fmt.Print* / log.Print*)" \
+      "$FMT_PRINTF occurrences" \
+      "Replace with structured logger (slog, zerolog, or zap). Key-value pairs enable log aggregation, filtering, and alerting."
+  fi
+
+  # Check for trace/span context propagation
+  OTEL=$(grep -rn "opentelemetry\|go.opentelemetry.io\|\"go.opentelemetry" \
+    --include="*.go" --include="go.mod" \
+    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l || echo "0")
+  if [ "$OTEL" -eq 0 ]; then
+    finding "MEDIUM" "No OpenTelemetry instrumentation found in Go services" \
+      "Go services" \
+      "Add go.opentelemetry.io/otel SDK. Instrument HTTP handlers and DB calls first. Export to Jaeger/Tempo/OTLP."
+  else
+    ok "OpenTelemetry present in Go services"
+  fi
+fi
+
+# Metrics endpoint check
+METRICS_EXPOSED=$(grep -rn "/metrics\|prometheus\|prom_client\|promhttp" \
+  --include="*.go" --include="*.py" --include="*.rs" \
+  --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l || echo "0")
+if [ "$METRICS_EXPOSED" -eq 0 ]; then
+  finding "HIGH" "No Prometheus metrics endpoint found in any service" \
+    "All services" \
+    "Add /metrics endpoint with at minimum: request rate, error rate, latency histogram (RED pattern). Use promhttp in Go."
+else
+  ok "Prometheus metrics present ($METRICS_EXPOSED references)"
+fi
+
+# Health endpoints
+HEALTH_ENDPOINTS=$(grep -rn '"/health\|"/healthz\|"/ping\|"/ready\|"/livez"' \
+  --include="*.go" --include="*.py" --include="*.rs" \
+  --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l || echo "0")
+if [ "$HEALTH_ENDPOINTS" -eq 0 ]; then
+  finding "MEDIUM" "No health check endpoints found (/health, /healthz, /ready)" \
+    "All services" \
+    "Add /healthz (liveness) and /readyz (readiness) to every HTTP service. Required for K8s probes."
+else
+  ok "Health endpoints present"
+fi
+
+
+# =============================================================================
+# 6. DEPENDENCY HYGIENE
+# =============================================================================
+section "6 · DEPENDENCY HYGIENE"
+{
+  echo "## 6. Dependency Hygiene"
+  echo ""
+} >> "$REPORT"
+
+log "Auditing dependency hygiene..."
+
+# Vendor directory committed (Go)
+if [ -d "vendor" ] || find . -name "vendor" -type d -not -path "*/.git/*" | grep -q .; then
+  VENDOR_SIZE=$(du -sh vendor 2>/dev/null | cut -f1 || echo "unknown")
+  finding "LOW" "Vendor directory committed to git ($VENDOR_SIZE)" \
+    "vendor/" \
+    "Consider using Go modules proxy (GOPROXY) instead of vendoring. If vendoring is intentional, ensure 'go mod vendor' is part of CI."
+fi
+
+# Multiple Go module versions of same major dependency
+if command -v go &>/dev/null; then
+  for mod_file in $(find . -name "go.mod" -not -path "*/.git/*" -not -path "*/vendor/*" 2>/dev/null); do
+    REPLACE_COUNT=$(grep -c "^replace" "$mod_file" || echo "0")
+    if [ "$REPLACE_COUNT" -gt 3 ]; then
+      finding "MEDIUM" "Excessive 'replace' directives in go.mod" \
+        "$mod_file ($REPLACE_COUNT replaces)" \
+        "Each replace is a maintenance burden. Investigate if upstream issues are fixed. Remove stale replaces."
+    fi
+  done
+fi
+
+# Outdated Dockerfile base images
+for df in $(find . -name "Dockerfile*" -not -path "*/.git/*" 2>/dev/null); do
+  BASE=$(grep "^FROM" "$df" 2>/dev/null | head -1 || echo "")
+  if echo "$BASE" | grep -qE ":latest|alpine:3\.[0-9]$|ubuntu:18\.|ubuntu:20\.|golang:1\.(1[0-9]|2[01])\b"; then
+    finding "MEDIUM" "Potentially outdated or unpinned base image in Dockerfile" \
+      "$df: $BASE" \
+      "Pin to specific digest or recent stable version. Use Dependabot or Renovate to automate base image updates."
+  fi
+done
+
+
+# =============================================================================
+# FINAL REPORT
+# =============================================================================
+TOTAL=$((SCORE_CRITICAL + SCORE_HIGH + SCORE_MEDIUM + SCORE_LOW))
+
+echo ""
+echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "${BOLD}  AUDIT COMPLETE${RESET}"
+echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "  ${RED}CRITICAL  ${RESET}  $SCORE_CRITICAL"
+echo -e "  ${RED}HIGH      ${RESET}  $SCORE_HIGH"
+echo -e "  ${YELLOW}MEDIUM    ${RESET}  $SCORE_MEDIUM"
+echo -e "  ${GREEN}LOW       ${RESET}  $SCORE_LOW"
+echo -e "  ─────────────────"
+echo -e "  ${BOLD}TOTAL     ${RESET}  $TOTAL findings"
+echo ""
+echo -e "  Full report: ${CYAN}$(pwd)/$REPORT${RESET}"
+echo ""
+
+# Append summary to report
+{
+  echo "---"
+  echo ""
+  echo "## Summary"
+  echo ""
+  echo "| Severity | Count |"
+  echo "|----------|-------|"
+  echo "| CRITICAL | $SCORE_CRITICAL |"
+  echo "| HIGH     | $SCORE_HIGH |"
+  echo "| MEDIUM   | $SCORE_MEDIUM |"
+  echo "| LOW      | $SCORE_LOW |"
+  echo "| **Total**| **$TOTAL** |"
+  echo ""
+  echo "### Recommended fix order"
+  echo ""
+  echo "1. **CRITICAL** — fix before next deploy (secrets exposure, state files leaked)"
+  echo "2. **HIGH (Security)** — fix within current sprint (root containers, missing limits)"
+  echo "3. **HIGH (CI/CD)** — fix before next release (unsigned images, missing service entries)"
+  echo "4. **MEDIUM** — schedule in next sprint"
+  echo "5. **LOW** — track as tech debt, address in next refactor cycle"
+} >> "$REPORT"
+
+echo "✅ Done. Open $REPORT for the full actionable breakdown."
