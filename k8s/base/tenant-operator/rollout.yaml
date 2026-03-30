@@ -26,6 +26,10 @@ spec:
       containers:
         - name: tenant-operator
           image: ghcr.io/scorpiontrader16-ai/youtuop-1/tenant-operator:1.0.0
+          ports:
+            - name: http
+              containerPort: 9099
+              protocol: TCP
           env:
             - name: POSTGRES_CONN
               valueFrom:

@@ -13,9 +13,6 @@ spec:
     - name: http
       port: 9092
       targetPort: 9092
-    - name: grpc
-      port: 8092
-      targetPort: 8092
 ---
 apiVersion: v1
 kind: Service
@@ -32,6 +29,3 @@ spec:
     - name: http
       port: 9092
       targetPort: 9092
-    - name: grpc
-      port: 8092
-      targetPort: 8092
