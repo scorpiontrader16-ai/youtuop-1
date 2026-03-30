@@ -10,8 +10,6 @@ import (
     "os/signal"
     "syscall"
     "time"
-
-    "github.com/gorilla/mux"
     "github.com/jackc/pgx/v5/pgxpool"
     "github.com/prometheus/client_golang/prometheus/promhttp"
     "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -55,7 +53,7 @@ func main() {
     s := &server{db: pool}
 
     // ── Router (gorilla/mux) ───────────────────────────────────────────
-    router := mux.NewRouter()
+    router := http.NewServeMux()
 
     // Health checks
     router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -87,16 +85,16 @@ func main() {
     })
 
     // Compliance & legal endpoints
-    router.HandleFunc("/api/v1/legal/holds", s.handleLegalHolds).Methods("GET", "POST")
-    router.HandleFunc("/api/v1/compliance/reports/mifid", s.handleGenerateMifidReport).Methods("POST")
-    router.HandleFunc("/api/v1/disclaimers/accept", s.handleAcceptDisclaimer).Methods("POST")
+    router.HandleFunc("/api/v1/legal/holds", s.handleLegalHolds)
+    router.HandleFunc("POST /api/v1/compliance/reports/mifid", s.handleGenerateMifidReport)
+    router.HandleFunc("POST /api/v1/disclaimers/accept", s.handleAcceptDisclaimer)
 
     // Tenant management (Super Admin)
-    router.HandleFunc("/api/v1/admin/tenants", s.handleCreateTenant).Methods("POST")
-    router.HandleFunc("/api/v1/admin/tenants", s.handleListTenants).Methods("GET")
-    router.HandleFunc("/api/v1/admin/tenants/{id}/suspend", s.handleSuspendTenant).Methods("PUT")
-    router.HandleFunc("/api/v1/admin/tenants/{id}", s.handleDeleteTenant).Methods("DELETE")
-    router.HandleFunc("/api/v1/admin/tenants/{id}/config", s.handleUpdateConfig).Methods("PUT")
+    router.HandleFunc("POST /api/v1/admin/tenants", s.handleCreateTenant)
+    router.HandleFunc("GET /api/v1/admin/tenants", s.handleListTenants)
+    router.HandleFunc("PUT /api/v1/admin/tenants/{id}/suspend", s.handleSuspendTenant)
+    router.HandleFunc("DELETE /api/v1/admin/tenants/{id}", s.handleDeleteTenant)
+    router.HandleFunc("PUT /api/v1/admin/tenants/{id}/config", s.handleUpdateConfig)
 
     // Metrics
     router.Handle("/metrics", promhttp.Handler())
@@ -400,8 +398,8 @@ func (s *server) handleListTenants(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleSuspendTenant(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    id := vars["id"]
+    
+    id := r.PathValue("id")
 
     _, err := s.db.Exec(r.Context(),
         `UPDATE tenants SET status = 'suspended', updated_at = NOW() WHERE id = $1`,
@@ -420,8 +418,8 @@ func (s *server) handleSuspendTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleDeleteTenant(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    id := vars["id"]
+    
+    id := r.PathValue("id")
 
     // Soft delete
     _, err := s.db.Exec(r.Context(),
@@ -441,8 +439,8 @@ func (s *server) handleDeleteTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleUpdateConfig(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    id := vars["id"]
+    
+    id := r.PathValue("id")
 
     var req struct {
         CustomDomain string                 `json:"custom_domain"`

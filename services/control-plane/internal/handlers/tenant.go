@@ -5,7 +5,6 @@ import (
     "net/http"
     "time"
 
-    "github.com/gorilla/mux"
     "github.com/jackc/pgx/v5/pgxpool"
     "go.uber.org/zap"
 )
@@ -111,7 +110,7 @@ func (h *TenantHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TenantHandler) SuspendTenant(w http.ResponseWriter, r *http.Request) {
-    id := mux.Vars(r)["id"]
+    id := r.PathValue("id")
     _, err := h.db.Exec(r.Context(),
         `UPDATE tenants SET status = 'suspended', updated_at = NOW() WHERE id = $1`,
         id,
@@ -129,7 +128,7 @@ func (h *TenantHandler) SuspendTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TenantHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
-    id := mux.Vars(r)["id"]
+    id := r.PathValue("id")
     // Soft delete
     _, err := h.db.Exec(r.Context(),
         `UPDATE tenants SET status = 'deleted', deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
@@ -147,7 +146,7 @@ func (h *TenantHandler) DeleteTenant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TenantHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
-    id := mux.Vars(r)["id"]
+    id := r.PathValue("id")
     var req struct {
         CustomDomain string                 `json:"custom_domain"`
         Branding     map[string]interface{} `json:"branding"`
