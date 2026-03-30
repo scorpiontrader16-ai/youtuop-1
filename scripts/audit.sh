@@ -200,6 +200,7 @@ else
   warn "buf not installed — skipping proto lint"
 fi
 
+set +e  # لماذا: kubeconform وgrepعند عدم وجود نتائج يرجعون exit 1 — نوقف exit-on-error من هنا
 # ══════════════════════════════════════════════════════════════════
 # 7. Kubernetes Manifests — kubeconform
 # ══════════════════════════════════════════════════════════════════
