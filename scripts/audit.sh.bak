@@ -219,14 +219,13 @@ if command -v kubeconform >/dev/null 2>&1; then
       -skip Kustomization,HelmRepository,GitRepository \
       -skip ClusterPolicy,Policy \
       2>&1 || true)
-    INVALID=$(echo "$OUT" | grep -oE "Invalid: [0-9]+" | grep -oE "[0-9]+" || echo "0")
-    ERRS=$(echo "$OUT" | grep -oE "Errors: [0-9]+" | grep -oE "[0-9]+" || echo "0")
-    if [ "$INVALID" -eq 0 ] && [ "$ERRS" -eq 0 ]; then
-      pass "kubeconform OK — Invalid=$INVALID Errors=$ERRS (CRDs skipped)"
+    ERR=$(echo "$OUT" | grep -ic "^.*error" || true)
+    if [ "$ERR" -eq 0 ]; then
+      pass "kubeconform OK (CRDs skipped)"
       echo "$OUT" | tail -3 >> "$REPORT"
     else
-      fail "kubeconform: Invalid=$INVALID Errors=$ERRS"
-      echo "$OUT" | grep -vE "^Summary|^$" | head -20 >> "$REPORT"
+      fail "kubeconform $ERR error(s)"
+      echo "$OUT" | grep -i "error" | head -20 >> "$REPORT"
     fi
   else
     warn "No K8s manifests found"
@@ -1091,11 +1090,7 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
     . 2>/dev/null \
     | grep -v "_test.go" \
     | grep -v "example\|sample\|placeholder\|YOUR_\|CHANGE_ME\|TODO\|fake\|mock\|dummy\|xxx\|test\|platform\|localhost" \
-    | grep -v "^Binary" \
-    | grep -v "{{.*password\|password.*}}" \
-    | grep -v "\${[A-Z_]*PASSWORD\|[A-Z_]*SECRET\|[A-Z_]*TOKEN}" \
-    | grep -v "vault-auth-config\|auth_query\|pgbouncer" \
-    || true)
+    | grep -v "^Binary" || true)
   if [ -n "$HITS" ]; then
     fail "Potential hardcoded secret (pattern: $pattern)"
     echo "$HITS" | head -3 >> "$REPORT"
@@ -1105,9 +1100,10 @@ done
 [ "$SECRET_FOUND" -eq 0 ] && pass "No hardcoded secrets detected"
 
 # تحقق إضافي: ConfigMap لا يحتوي على secrets
-# لماذا: SQL column names مثل "password" في auth_query ليست credentials حقيقية
-CM_SECRETS=$(grep -rn "password\|secret\|token" k8s/base/*/configmap*.yaml 2>/dev/null   | grep -v "^#"   | grep -v "placeholder\|replace\|auth_query\|SELECT\|pgbouncer\|VAULT_\|\${"   || true)
-[ -z "$CM_SECRETS" ] && pass "No sensitive credentials in ConfigMaps"   || { fail "Sensitive credentials in ConfigMap:"; echo "$CM_SECRETS" | head -5 >> "$REPORT"; }
+CM_SECRETS=$(grep -rn "password\|secret\|token\|key" k8s/base/*/configmap*.yaml 2>/dev/null \
+  | grep -v "^#" | grep -v "secret_key_base_placeholder\|replace" || true)
+[ -z "$CM_SECRETS" ] && pass "No sensitive data in ConfigMaps" \
+  || { fail "Sensitive data found in ConfigMap:"; echo "$CM_SECRETS" | head -5 >> "$REPORT"; }
 
 # ══════════════════════════════════════════════════════════════════
 # 21. Security — Pod Security Context (مع استثناءات مبررة)
@@ -1196,21 +1192,20 @@ find k8s/ -name "*.yaml" | xargs grep -l "default-deny\|deny-all" 2>/dev/null | 
 # ══════════════════════════════════════════════════════════════════
 section "23. Security — ServiceAccount Token Automount"
 # ingestion: Vault Agent | ml-engine: IRSA | tenant-operator: K8s API
-# لماذا hardcoded: variable لا يُورَث في subshell
 for svc in services/*/; do
   name=$(basename "$svc")
   sa="k8s/base/$name/serviceaccount.yaml"
   [ -f "$sa" ] || continue
 
-  IS_JUSTIFIED=false
-  for j in ingestion ml-engine tenant-operator; do
-    [ "$name" = "$j" ] && IS_JUSTIFIED=true && break
-  done
-
-  if $IS_JUSTIFIED; then
-    grep -q "automountServiceAccountToken: true" "$sa"       && pass "automountServiceAccountToken=true (JUSTIFIED — Vault/IRSA/K8s-API): $name"       || warn "automountServiceAccountToken not explicit true: $name"
+  if echo "$LEGITIMATE_AUTOMOUNT" | grep -qw "$name"; then
+    # يجب أن يكون true — تحقق من السبب
+    grep -q "automountServiceAccountToken: true" "$sa" \
+      && pass "automountServiceAccountToken=true (JUSTIFIED): $name" \
+      || warn "automountServiceAccountToken not true for $name (expected for Vault/IRSA/K8s-API)"
   else
-    grep -q "automountServiceAccountToken: false" "$sa"       && pass "automountServiceAccountToken=false: $name"       || fail "automountServiceAccountToken not disabled: $name"
+    grep -q "automountServiceAccountToken: false" "$sa" \
+      && pass "automountServiceAccountToken=false: $name" \
+      || fail "automountServiceAccountToken not disabled: $name"
   fi
 done
 
@@ -1587,18 +1582,15 @@ find services -path "*/migrations/*.sql" 2>/dev/null | sort | while read -r f; d
     || fail "Scope header MISSING: $f"
 done
 
-# لماذا per-service: كل service لها sequence مستقلة — تكرار عبر services طبيعي
-MIG_DUP_FOUND=0
-for svc_dir in services/*/; do
-  svc_name=$(basename "$svc_dir")
-  SVC_NUMS=$(find "$svc_dir" -path "*/migrations/*.sql" 2>/dev/null     | xargs -I{} basename {} | grep -oE "^[0-9]+" | sort -n || true)
-  SVC_DUPS=$(echo "$SVC_NUMS" | uniq -d || true)
-  if [ -n "$SVC_DUPS" ]; then
-    fail "Duplicate migration numbers in $svc_name: $SVC_DUPS"
-    MIG_DUP_FOUND=$((MIG_DUP_FOUND+1))
-  fi
-done
-[ "$MIG_DUP_FOUND" -eq 0 ] && pass "No duplicate migration numbers within any service"
+# تحقق من تكرار الأرقام عبر كل الـ services
+ALL_NUMS=$(find services -path "*/migrations/*.sql" 2>/dev/null \
+  | awk -F/ '{print $NF}' | grep -oE '^[0-9]+' | sort -n)
+DUP_NUMS=$(echo "$ALL_NUMS" | uniq -d)
+if [ -z "$DUP_NUMS" ]; then
+  pass "No duplicate migration numbers"
+else
+  fail "Duplicate migration numbers found: $DUP_NUMS"
+fi
 
 # تحقق من فجوات في الترقيم
 NUMS=$(echo "$ALL_NUMS" | sort -n | uniq)
@@ -1629,11 +1621,7 @@ find services -maxdepth 2 -name "go.mod" | sort | while read -r modfile; do
   # local replace directives — مع استثناء hydration/ingestion (يستخدمان proto)
   LOCAL_REPLACE=$(grep "^replace" "$modfile" | grep "\.\." || true)
   if [ -n "$LOCAL_REPLACE" ]; then
-    IS_REPLACE_OK=false
-    for j in hydration ingestion; do
-      [ "$name" = "$j" ] && IS_REPLACE_OK=true && break
-    done
-    if $IS_REPLACE_OK; then
+    if echo "$LEGITIMATE_REPLACE" | grep -qw "$name"; then
       pass "Local replace JUSTIFIED (proto import): $name"
     else
       fail "Unexpected local replace directive: $name"

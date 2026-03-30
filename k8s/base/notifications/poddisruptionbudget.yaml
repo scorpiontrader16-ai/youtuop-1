@@ -6,7 +6,7 @@ metadata:
   labels:
     app: notifications
 spec:
-  minAvailable: 2
+  minAvailable: 0
   selector:
     matchLabels:
       app: notifications

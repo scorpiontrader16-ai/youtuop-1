@@ -6,7 +6,7 @@ metadata:
   labels:
     app: feature-flags
 spec:
-  minAvailable: 2
+  minAvailable: 0
   selector:
     matchLabels:
       app: feature-flags

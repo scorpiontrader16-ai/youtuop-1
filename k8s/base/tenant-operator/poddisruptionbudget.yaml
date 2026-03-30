@@ -4,7 +4,7 @@ metadata:
   name: tenant-operator
   namespace: platform
 spec:
-  minAvailable: 1
+  minAvailable: 0
   selector:
     matchLabels:
       app: tenant-operator

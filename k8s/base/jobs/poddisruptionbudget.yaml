@@ -4,7 +4,7 @@ metadata:
   name: jobs
   namespace: platform
 spec:
-  minAvailable: 2
+  minAvailable: 0
   selector:
     matchLabels:
       app: jobs

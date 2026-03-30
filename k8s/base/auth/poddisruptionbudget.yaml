@@ -4,7 +4,7 @@ metadata:
   name: auth
   namespace: platform
 spec:
-  minAvailable: 2
+  minAvailable: 1
   selector:
     matchLabels:
       app: auth

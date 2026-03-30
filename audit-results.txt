@@ -1,0 +1,98 @@
+
+## 1. Repository Structure
+
+- [x] Directory exists: services
+- [x] Directory exists: k8s
+- [x] Directory exists: proto
+- [x] Directory exists: gen
+- [x] Directory exists: scripts
+- [x] Directory exists: .github/workflows
+- [x] .env.example present
+- [x] Makefile present
+- [x] Root README.md present
+- [~] WARN CHANGELOG.md missing
+- [x] SECURITY.md present
+- [x] .gitignore present
+- [x] .gitleaks.toml present
+
+## 2. Duplicate Files
+
+- [x] No exact duplicate files (fdupes)
+- [~] WARN Same filename in multiple paths (expected for go.mod/Cargo.toml/main.go):
+
+## 3. Go Services — Build + Vet + Test
+
+- [x] go build OK: analytics
+- [x] go vet OK: analytics
+- [~] WARN No test files: analytics
+- [x] Dockerfile present: analytics
+- [x] go build OK: auth
+- [x] go vet OK: auth
+- [~] WARN No test files: auth
+- [x] Dockerfile present: auth
+- [x] go build OK: billing
+- [x] go vet OK: billing
+- [~] WARN No test files: billing
+- [x] Dockerfile present: billing
+- [x] go build OK: control-plane
+- [x] go vet OK: control-plane
+- [~] WARN No test files: control-plane
+- [x] Dockerfile present: control-plane
+- [x] go build OK: developer-portal
+- [x] go vet OK: developer-portal
+- [~] WARN No test files: developer-portal
+- [x] Dockerfile present: developer-portal
+- [x] go build OK: feature-flags
+- [x] go vet OK: feature-flags
+- [~] WARN No test files: feature-flags
+- [x] Dockerfile present: feature-flags
+- [x] go build OK: hydration
+- [x] go vet OK: hydration
+- [~] WARN No test files: hydration
+- [x] Dockerfile present: hydration
+- [x] go build OK: ingestion
+- [x] go vet OK: ingestion
+- [~] WARN No test files: ingestion
+- [x] Dockerfile present: ingestion
+- [x] go build OK: jobs
+- [x] go vet OK: jobs
+- [~] WARN No test files: jobs
+- [x] Dockerfile present: jobs
+- [x] go build OK: notifications
+- [x] go vet OK: notifications
+- [~] WARN No test files: notifications
+- [x] Dockerfile present: notifications
+- [x] go build OK: realtime
+- [x] go vet OK: realtime
+- [~] WARN No test files: realtime
+- [x] Dockerfile present: realtime
+- [x] go build OK: search
+- [x] go vet OK: search
+- [~] WARN No test files: search
+- [x] Dockerfile present: search
+- [x] go build OK: tenant-operator
+- [x] go vet OK: tenant-operator
+- [~] WARN No test files: tenant-operator
+- [x] Dockerfile present: tenant-operator
+
+## 4. Rust Services — Check + Clippy
+
+- [x] cargo check OK: processing
+- [x] cargo clippy OK: processing
+- [x] Cargo.lock present: processing
+
+## 5. Proto Generated Files
+
+- [x] event.pb.go exists
+- [x] engine.pb.go exists
+- [x] engine_grpc.pb.go exists
+
+## 6. Proto Tooling — buf
+
+- [x] buf.yaml found: proto/buf.yaml
+- [x] buf.gen.yaml found: proto/buf.gen.yaml
+- [x] buf.lock present
+- [~] WARN buf not installed — skipping proto lint
+
+## 7. Kubernetes Manifests — kubeconform
+

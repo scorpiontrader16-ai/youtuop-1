@@ -8,7 +8,7 @@ metadata:
 spec:
   # minAvailable=1 مع replicas=2 يضمن إن الـ processing ما توقفش خالص
   # أثناء node maintenance أو rolling update
-  minAvailable: 1
+  minAvailable: 0
   selector:
     matchLabels:
       app: processing
