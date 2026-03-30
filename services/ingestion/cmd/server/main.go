@@ -222,11 +222,14 @@ func main() {
 
 	// ── Feature Producer (Redpanda — ML streaming) ────────────────────────
 	// Lazy connection — لا يتصل حتى أول write attempt
-	featureProducer := kafkapkg.NewFeatureProducer(
+	featureProducer, err := kafkapkg.NewFeatureProducer(
 		cfg.RedpandaBrokers,
 		"feature-events",
 		log,
 	)
+	if err != nil {
+		log.Fatal("failed to create feature producer", zap.Error(err))
+	}
 
 	limiter := rate.NewLimiter(1000, 100)
 

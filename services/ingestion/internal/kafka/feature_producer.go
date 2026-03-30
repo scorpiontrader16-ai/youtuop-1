@@ -1,6 +1,6 @@
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  Full path: services/ingestion/internal/kafka/feature_producer.go ║
-// ║  Status: 🆕 New                                                  ║
+// ║  Migrated: segmentio/kafka-go → twmb/franz-go                   ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
 package kafka
@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"time"
 
-	kafka "github.com/segmentio/kafka-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 )
 
@@ -44,32 +44,30 @@ var (
 // topic:    "feature-events"
 // encoding: JSON
 // key:      tenant_id — يضمن ordered delivery per tenant
-// acks:     RequireOne — at-least-once delivery
+// acks:     LeaderEpoch — at-least-once delivery
 // compress: Snappy — سريع مع ضغط جيد
 type FeatureProducer struct {
-	writer *kafka.Writer
+	client *kgo.Client
+	topic  string
 	log    *zap.Logger
 }
 
 // NewFeatureProducer ينشئ producer جاهزاً للاستخدام الفوري
 //
-//   brokers: قائمة Redpanda brokers — []string{"redpanda:9092"}
-//   topic:   "feature-events"
-//   log:     zap structured logger
-//
-// الـ writer lazy — لا يتصل بـ Redpanda حتى أول write attempt.
-// هذا صحيح لأن Redpanda قد لا يكون جاهزاً عند startup.
-func NewFeatureProducer(brokers []string, topic string, log *zap.Logger) *FeatureProducer {
-	w := &kafka.Writer{
-		Addr:         kafka.TCP(brokers...),
-		Topic:        topic,
-		Balancer:     &kafka.LeastBytes{},
-		Async:        false,
-		MaxAttempts:  3,
-		WriteTimeout: 2 * time.Second,
-		ReadTimeout:  2 * time.Second,
-		Compression:  kafka.Snappy,
-		RequiredAcks: kafka.RequireOne,
+//	brokers: قائمة Redpanda brokers — []string{"redpanda:9092"}
+//	topic:   "feature-events"
+//	log:     zap structured logger
+func NewFeatureProducer(brokers []string, topic string, log *zap.Logger) (*FeatureProducer, error) {
+	client, err := kgo.NewClient(
+		kgo.SeedBrokers(brokers...),
+		kgo.DefaultProduceTopic(topic),
+		kgo.RequiredAcks(kgo.LeaderAck()),
+		kgo.ProducerBatchCompression(kgo.SnappyCompression()),
+		kgo.RecordRetries(3),
+		kgo.ProduceRequestTimeout(2*time.Second),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("feature_producer: failed to create client: %w", err)
 	}
 
 	log.Info("feature producer initialized",
@@ -78,15 +76,13 @@ func NewFeatureProducer(brokers []string, topic string, log *zap.Logger) *Featur
 	)
 
 	return &FeatureProducer{
-		writer: w,
+		client: client,
+		topic:  topic,
 		log:    log,
-	}
+	}, nil
 }
 
 // SendFeatureEvent يُسلسل FeatureEvent كـ JSON ويُرسله إلى Redpanda
-//
-// يُستدعى من goroutine منفصلة في main.go (non-blocking على الـ hot path).
-// context يجب أن يحمل timeout (2s موصى به).
 func (p *FeatureProducer) SendFeatureEvent(ctx context.Context, event *FeatureEvent) error {
 	if event == nil {
 		return fmt.Errorf("feature_producer: event must not be nil")
@@ -106,17 +102,18 @@ func (p *FeatureProducer) SendFeatureEvent(ctx context.Context, event *FeatureEv
 		return fmt.Errorf("feature_producer: json marshal failed: %w", err)
 	}
 
-	msg := kafka.Message{
+	record := &kgo.Record{
+		Topic: p.topic,
 		Key:   []byte(event.TenantID),
 		Value: value,
-		Headers: []kafka.Header{
+		Headers: []kgo.RecordHeader{
 			{Key: "event_id", Value: []byte(event.EventID)},
 			{Key: "source_type", Value: []byte(event.SourceType)},
 			{Key: "content_type", Value: []byte("application/json")},
 		},
 	}
 
-	if err := p.writer.WriteMessages(ctx, msg); err != nil {
+	if err := p.client.ProduceSync(ctx, record).FirstErr(); err != nil {
 		featureEventsFailedTotal.Inc()
 		return fmt.Errorf("feature_producer: write failed: %w", err)
 	}
@@ -127,12 +124,8 @@ func (p *FeatureProducer) SendFeatureEvent(ctx context.Context, event *FeatureEv
 	return nil
 }
 
-// Close يغلق الـ writer بشكل آمن — يُستدعى عند graceful shutdown.
-// ينتظر حتى تنتهي كل الـ pending writes.
+// Close يغلق الـ client بشكل آمن — يُستدعى عند graceful shutdown.
 func (p *FeatureProducer) Close() {
-	if err := p.writer.Close(); err != nil {
-		p.log.Error("feature producer close error", zap.Error(err))
-		return
-	}
+	p.client.Close()
 	p.log.Info("feature producer closed")
 }
