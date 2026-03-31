@@ -1,13 +1,11 @@
 module github.com/scorpiontrader16-ai/youtuop-1/services/ingestion
 
-go 1.24.0
-
-toolchain go1.24.13
+go 1.25.0
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.30.0
 	github.com/grafana/pyroscope-go v1.2.8
-	github.com/jackc/pgx/v5 v5.7.1
+	github.com/jackc/pgx/v5 v5.9.1
 	github.com/minio/minio-go/v7 v7.0.70
 	github.com/parquet-go/parquet-go v0.23.0
 	github.com/pressly/goose/v3 v3.24.0
