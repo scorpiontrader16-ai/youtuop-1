@@ -98,7 +98,7 @@ services:
   # PostgreSQL — Warm Store (relational + pgvector)
   # ─────────────────────────────────────────────────────────
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg17
     container_name: postgres
     ports:
       - "5432:5432"
