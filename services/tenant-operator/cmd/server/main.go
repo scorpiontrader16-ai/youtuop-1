@@ -1,103 +1,113 @@
 package main
 
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  services/tenant-operator/cmd/server/main.go                    ║
+// ║  M9 — reconcile loop: provisions K8s resources per active tenant ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	"github.com/scorpiontrader16-ai/youtuop-1/services/tenant-operator/internal/onboarding"
 )
 
 func main() {
 	logger := zap.Must(zap.NewProduction())
-	defer logger.Sync()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	defer logger.Sync() //nolint:errcheck
 
-	// Postgres connection
-	pgConn := os.Getenv("POSTGRES_CONN")
-	if pgConn == "" {
-		pgConn = "postgres://postgres:postgres@postgres.platform.svc.cluster.local:5432/platform?sslmode=disable"
-	}
+	// ── PostgreSQL ────────────────────────────────────────────────────
+	pgConn := getEnv("POSTGRES_CONN",
+		"postgres://postgres:postgres@postgres.platform.svc.cluster.local:5432/platform?sslmode=disable")
+
 	pool, err := pgxpool.New(context.Background(), pgConn)
 	if err != nil {
 		logger.Fatal("failed to connect postgres", zap.Error(err))
 	}
 	defer pool.Close()
 
-	// Kubernetes client
-	config, err := rest.InClusterConfig()
+	// ── Kubernetes ────────────────────────────────────────────────────
+	k8sCfg, err := rest.InClusterConfig()
 	if err != nil {
 		logger.Fatal("failed to get k8s config", zap.Error(err))
 	}
-	k8sClient, err := kubernetes.NewForConfig(config)
+	k8sClient, err := kubernetes.NewForConfig(k8sCfg)
 	if err != nil {
 		logger.Fatal("failed to create k8s client", zap.Error(err))
 	}
 
-	// Redpanda brokers (placeholder – topic creation not implemented in this version)
-	// kafkaBrokers := []string{os.Getenv("KAFKA_BROKERS")}
-	// if len(kafkaBrokers) == 0 || kafkaBrokers[0] == "" {
-	//     kafkaBrokers = []string{"redpanda.platform.svc.cluster.local:9092"}
-	// }
+	provisioner := onboarding.NewProvisioner(k8sClient, logger)
 
-	logger.Info("tenant operator started")
+	logger.Info("tenant-operator started")
+
+	// ── Reconcile Loop ────────────────────────────────────────────────
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	for {
 		select {
-		case <-ticker.C:
-			rows, err := pool.Query(context.Background(),
-				`SELECT id, slug, custom_domain, status FROM tenants WHERE status IN ('active', 'suspended')`)
-			if err != nil {
-				logger.Error("query tenants", zap.Error(err))
-				continue
-			}
-
-			for rows.Next() {
-				var id, slug, customDomain, status string
-				if err := rows.Scan(&id, &slug, &customDomain, &status); err != nil {
-					continue
-				}
-
-				// Ensure Kubernetes namespace
-				nsName := fmt.Sprintf("tenant-%s", slug)
-				_, err := k8sClient.CoreV1().Namespaces().Get(context.Background(), nsName, metav1.GetOptions{})
-				if err != nil {
-					ns := &corev1.Namespace{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: nsName,
-							Labels: map[string]string{
-								"app.kubernetes.io/managed-by": "tenant-operator",
-								"tenant-id":                    id,
-							},
-						},
-					}
-					_, err = k8sClient.CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
-					if err != nil {
-						logger.Error("create namespace", zap.Error(err), zap.String("ns", nsName))
-					} else {
-						logger.Info("created namespace", zap.String("ns", nsName))
-					}
-				}
-
-				// TODO: create Kafka topic using kafka admin client
-				// For now just log
-				logger.Info("ensuring kafka topic", zap.String("topic", fmt.Sprintf("tenant-%s-events", slug)))
-
-				// TODO: create PostgreSQL schema (schema-per-tenant)
-			}
-			rows.Close()
-
-		case <-context.Background().Done():
+		case <-ctx.Done():
+			logger.Info("tenant-operator stopping")
 			return
+
+		case <-ticker.C:
+			if err := reconcile(ctx, pool, provisioner, logger); err != nil {
+				logger.Error("reconcile error", zap.Error(err))
+			}
 		}
 	}
+}
+
+// reconcile queries all active tenants and ensures their K8s resources exist.
+func reconcile(ctx context.Context, pool *pgxpool.Pool, p *onboarding.Provisioner, logger *zap.Logger) error {
+	rows, err := pool.Query(ctx,
+		`SELECT id, slug, tier FROM tenants WHERE status = 'active'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var provisioned int
+	for rows.Next() {
+		var id, slug, tier string
+		if err := rows.Scan(&id, &slug, &tier); err != nil {
+			logger.Error("scan tenant row", zap.Error(err))
+			continue
+		}
+
+		if err := p.Provision(ctx, id, slug, tier); err != nil {
+			logger.Error("provision tenant",
+				zap.String("tenant_id", id),
+				zap.String("slug", slug),
+				zap.Error(err),
+			)
+			continue
+		}
+		provisioned++
+	}
+
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	logger.Info("reconcile complete", zap.Int("provisioned", provisioned))
+	return nil
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
