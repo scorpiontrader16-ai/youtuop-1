@@ -121,7 +121,7 @@ services:
   # Redis — Hot Cache
   # ─────────────────────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    image: docker.dragonflydb.io/dragonflydb/dragonfly
     container_name: redis
     ports:
       - "6379:6379"
