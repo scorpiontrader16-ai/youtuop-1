@@ -24,7 +24,7 @@ jobs:
         run: buf dep update
 
       - name: Commit buf.lock
-        uses: stefanzweifel/git-auto-commit-action@b863ae1933cb653a53c021fe36dbb774e1fb9403  # v5
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9  # v7.1.0
         with:
           commit_message: "chore: generate proto/buf.lock"
           file_pattern: proto/buf.lock
