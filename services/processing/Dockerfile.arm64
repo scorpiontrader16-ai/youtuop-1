@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1.85-slim AS chef
+FROM --platform=$BUILDPLATFORM rust:1.86-slim AS chef
 RUN apt-get update && apt-get install -y \
     cmake \
     make \

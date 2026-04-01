@@ -774,7 +774,7 @@ jobs:
       - name: Setup Rust 1.88
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: '1.85.0'
+          toolchain: '1.86.0'
           components: clippy
       - name: Cache Cargo
         uses: actions/cache@v4

@@ -24,7 +24,6 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9091"
         prometheus.io/path: "/metrics"
-      annotations:
         # ── Vault Agent Injector ──────────────────────────────────────────
         # لماذا: dynamic DB credentials بدلاً من static secrets
         # TTL 1h مع auto-renew — لا rotation يدوي
