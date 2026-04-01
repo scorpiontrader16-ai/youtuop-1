@@ -9,3 +9,4 @@ resources:
   - scaledobject.yaml
   - service.yaml
   - deployment.yaml
+  - certificate.yaml
