@@ -22,18 +22,18 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
       - name: Setup buf
-        uses: bufbuild/buf-setup-action@v1
+        uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99  # v1
         with:
           version: '1.32.2'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check for breaking changes
-        uses: bufbuild/buf-breaking-action@v1
+        uses: bufbuild/buf-breaking-action@c57b3d842a5c3f3b454756ef65305a50a587c5ba  # v1
         with:
           input: proto/
           against: 'https://github.com/${{ github.repository }}.git#branch=main,subdir=proto'

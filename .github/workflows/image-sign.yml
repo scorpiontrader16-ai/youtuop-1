@@ -46,22 +46,22 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Get current version
         id: version
@@ -75,7 +75,7 @@ jobs:
 
       - name: Build & Push — Ingestion
         id: build-ingestion
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: .
           file: services/ingestion/Dockerfile.arm64
@@ -98,7 +98,7 @@ jobs:
             ghcr.io/${{ github.repository }}/ingestion@${{ steps.build-ingestion.outputs.digest }}
 
       - name: Generate SBOM — Ingestion
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/ingestion@${{ steps.build-ingestion.outputs.digest }}
           format: spdx-json
@@ -111,14 +111,14 @@ jobs:
             ghcr.io/${{ github.repository }}/ingestion@${{ steps.build-ingestion.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Ingestion
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-ingestion.spdx.json
           fail-build: false
           severity-cutoff: critical
 
       - name: Upload SBOM — Ingestion
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-ingestion
           path: sbom-ingestion.spdx.json
@@ -132,22 +132,22 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Get current version
         id: version
@@ -161,7 +161,7 @@ jobs:
 
       - name: Build & Push — Processing
         id: build-processing
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: .
           file: services/processing/Dockerfile.arm64
@@ -184,7 +184,7 @@ jobs:
             ghcr.io/${{ github.repository }}/processing@${{ steps.build-processing.outputs.digest }}
 
       - name: Generate SBOM — Processing
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/processing@${{ steps.build-processing.outputs.digest }}
           format: spdx-json
@@ -197,14 +197,14 @@ jobs:
             ghcr.io/${{ github.repository }}/processing@${{ steps.build-processing.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Processing
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-processing.spdx.json
           fail-build: false
           severity-cutoff: critical
 
       - name: Upload SBOM — Processing
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-processing
           path: sbom-processing.spdx.json
@@ -218,22 +218,22 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Get current version
         id: version
@@ -247,7 +247,7 @@ jobs:
 
       - name: Build & Push — Auth
         id: build-auth
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/auth
           file: services/auth/Dockerfile.arm64
@@ -270,7 +270,7 @@ jobs:
             ghcr.io/${{ github.repository }}/auth@${{ steps.build-auth.outputs.digest }}
 
       - name: Generate SBOM — Auth
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/auth@${{ steps.build-auth.outputs.digest }}
           format: spdx-json
@@ -283,14 +283,14 @@ jobs:
             ghcr.io/${{ github.repository }}/auth@${{ steps.build-auth.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Auth
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-auth.spdx.json
           fail-build: false
           severity-cutoff: critical
 
       - name: Upload SBOM — Auth
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-auth
           path: sbom-auth.spdx.json
@@ -304,22 +304,22 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Get current version
         id: version
@@ -333,7 +333,7 @@ jobs:
 
       - name: Build & Push — Billing
         id: build-billing
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/billing
           file: services/billing/Dockerfile.arm64
@@ -356,7 +356,7 @@ jobs:
             ghcr.io/${{ github.repository }}/billing@${{ steps.build-billing.outputs.digest }}
 
       - name: Generate SBOM — Billing
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/billing@${{ steps.build-billing.outputs.digest }}
           format: spdx-json
@@ -369,14 +369,14 @@ jobs:
             ghcr.io/${{ github.repository }}/billing@${{ steps.build-billing.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Billing
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-billing.spdx.json
           fail-build: false
           severity-cutoff: critical
 
       - name: Upload SBOM — Billing
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-billing
           path: sbom-billing.spdx.json
@@ -390,22 +390,22 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
 
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
       - name: Get current version
         id: version
@@ -419,7 +419,7 @@ jobs:
 
       - name: Build & Push — Notifications
         id: build-notifications
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/notifications
           file: services/notifications/Dockerfile.arm64
@@ -442,7 +442,7 @@ jobs:
             ghcr.io/${{ github.repository }}/notifications@${{ steps.build-notifications.outputs.digest }}
 
       - name: Generate SBOM — Notifications
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/notifications@${{ steps.build-notifications.outputs.digest }}
           format: spdx-json
@@ -455,14 +455,14 @@ jobs:
             ghcr.io/${{ github.repository }}/notifications@${{ steps.build-notifications.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Notifications
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-notifications.spdx.json
           fail-build: false
           severity-cutoff: critical
 
       - name: Upload SBOM — Notifications
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-notifications
           path: sbom-notifications.spdx.json
@@ -476,19 +476,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -499,7 +499,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Analytics
         id: build-analytics
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/analytics
           file: services/analytics/Dockerfile.arm64
@@ -520,7 +520,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/analytics@${{ steps.build-analytics.outputs.digest }}
       - name: Generate SBOM — Analytics
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/analytics@${{ steps.build-analytics.outputs.digest }}
           format: spdx-json
@@ -531,13 +531,13 @@ jobs:
             --sbom sbom-analytics.spdx.json \
             ghcr.io/${{ github.repository }}/analytics@${{ steps.build-analytics.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Analytics
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-analytics.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Analytics
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-analytics
           path: sbom-analytics.spdx.json
@@ -551,19 +551,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -574,7 +574,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Control-Plane
         id: build-control-plane
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/control-plane
           file: services/control-plane/Dockerfile.arm64
@@ -595,7 +595,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/control-plane@${{ steps.build-control-plane.outputs.digest }}
       - name: Generate SBOM — Control-Plane
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/control-plane@${{ steps.build-control-plane.outputs.digest }}
           format: spdx-json
@@ -606,13 +606,13 @@ jobs:
             --sbom sbom-control-plane.spdx.json \
             ghcr.io/${{ github.repository }}/control-plane@${{ steps.build-control-plane.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Control-Plane
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-control-plane.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Control-Plane
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-control-plane
           path: sbom-control-plane.spdx.json
@@ -626,19 +626,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -649,7 +649,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Developer-Portal
         id: build-developer-portal
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/developer-portal
           file: services/developer-portal/Dockerfile.arm64
@@ -670,7 +670,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/developer-portal@${{ steps.build-developer-portal.outputs.digest }}
       - name: Generate SBOM — Developer-Portal
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/developer-portal@${{ steps.build-developer-portal.outputs.digest }}
           format: spdx-json
@@ -681,13 +681,13 @@ jobs:
             --sbom sbom-developer-portal.spdx.json \
             ghcr.io/${{ github.repository }}/developer-portal@${{ steps.build-developer-portal.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Developer-Portal
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-developer-portal.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Developer-Portal
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-developer-portal
           path: sbom-developer-portal.spdx.json
@@ -701,19 +701,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -724,7 +724,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Feature-Flags
         id: build-feature-flags
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/feature-flags
           file: services/feature-flags/Dockerfile.arm64
@@ -745,7 +745,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/feature-flags@${{ steps.build-feature-flags.outputs.digest }}
       - name: Generate SBOM — Feature-Flags
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/feature-flags@${{ steps.build-feature-flags.outputs.digest }}
           format: spdx-json
@@ -756,13 +756,13 @@ jobs:
             --sbom sbom-feature-flags.spdx.json \
             ghcr.io/${{ github.repository }}/feature-flags@${{ steps.build-feature-flags.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Feature-Flags
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-feature-flags.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Feature-Flags
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-feature-flags
           path: sbom-feature-flags.spdx.json
@@ -776,19 +776,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -799,7 +799,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Jobs
         id: build-jobs
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/jobs
           file: services/jobs/Dockerfile.arm64
@@ -820,7 +820,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/jobs@${{ steps.build-jobs.outputs.digest }}
       - name: Generate SBOM — Jobs
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/jobs@${{ steps.build-jobs.outputs.digest }}
           format: spdx-json
@@ -831,13 +831,13 @@ jobs:
             --sbom sbom-jobs.spdx.json \
             ghcr.io/${{ github.repository }}/jobs@${{ steps.build-jobs.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Jobs
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-jobs.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Jobs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-jobs
           path: sbom-jobs.spdx.json
@@ -851,19 +851,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -874,7 +874,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Realtime
         id: build-realtime
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/realtime
           file: services/realtime/Dockerfile.arm64
@@ -895,7 +895,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/realtime@${{ steps.build-realtime.outputs.digest }}
       - name: Generate SBOM — Realtime
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/realtime@${{ steps.build-realtime.outputs.digest }}
           format: spdx-json
@@ -906,13 +906,13 @@ jobs:
             --sbom sbom-realtime.spdx.json \
             ghcr.io/${{ github.repository }}/realtime@${{ steps.build-realtime.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Realtime
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-realtime.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Realtime
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-realtime
           path: sbom-realtime.spdx.json
@@ -926,19 +926,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -949,7 +949,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Search
         id: build-search
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/search
           file: services/search/Dockerfile.arm64
@@ -970,7 +970,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/search@${{ steps.build-search.outputs.digest }}
       - name: Generate SBOM — Search
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/search@${{ steps.build-search.outputs.digest }}
           format: spdx-json
@@ -981,13 +981,13 @@ jobs:
             --sbom sbom-search.spdx.json \
             ghcr.io/${{ github.repository }}/search@${{ steps.build-search.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Search
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-search.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Search
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-search
           path: sbom-search.spdx.json
@@ -1001,19 +1001,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -1024,7 +1024,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Tenant-Operator
         id: build-tenant-operator
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/tenant-operator
           file: services/tenant-operator/Dockerfile.arm64
@@ -1045,7 +1045,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/tenant-operator@${{ steps.build-tenant-operator.outputs.digest }}
       - name: Generate SBOM — Tenant-Operator
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/tenant-operator@${{ steps.build-tenant-operator.outputs.digest }}
           format: spdx-json
@@ -1056,13 +1056,13 @@ jobs:
             --sbom sbom-tenant-operator.spdx.json \
             ghcr.io/${{ github.repository }}/tenant-operator@${{ steps.build-tenant-operator.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Tenant-Operator
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-tenant-operator.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Tenant-Operator
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-tenant-operator
           path: sbom-tenant-operator.spdx.json
@@ -1076,19 +1076,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -1099,7 +1099,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — ML-Engine
         id: build-ml-engine
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/ml-engine
           file: services/ml-engine/Dockerfile
@@ -1120,7 +1120,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/ml-engine@${{ steps.build-ml-engine.outputs.digest }}
       - name: Generate SBOM — ML-Engine
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/ml-engine@${{ steps.build-ml-engine.outputs.digest }}
           format: spdx-json
@@ -1131,13 +1131,13 @@ jobs:
             --sbom sbom-ml-engine.spdx.json \
             ghcr.io/${{ github.repository }}/ml-engine@${{ steps.build-ml-engine.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — ML-Engine
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-ml-engine.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — ML-Engine
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-ml-engine
           path: sbom-ml-engine.spdx.json
@@ -1151,19 +1151,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -1174,7 +1174,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Data Quality
         id: build-data-quality
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/data-quality
           file: services/data-quality/Dockerfile
@@ -1195,7 +1195,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/data-quality@${{ steps.build-data-quality.outputs.digest }}
       - name: Generate SBOM — Data Quality
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/data-quality@${{ steps.build-data-quality.outputs.digest }}
           format: spdx-json
@@ -1206,13 +1206,13 @@ jobs:
             --sbom sbom-data-quality.spdx.json \
             ghcr.io/${{ github.repository }}/data-quality@${{ steps.build-data-quality.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Data Quality
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-data-quality.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Data Quality
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-data-quality
           path: sbom-data-quality.spdx.json
@@ -1226,19 +1226,19 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9  # v3
       - name: Login to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
       - name: Get current version
         id: version
         run: |
@@ -1249,7 +1249,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
       - name: Build & Push — Hydration
         id: build-hydration
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: .
           file: services/hydration/Dockerfile.arm64
@@ -1270,7 +1270,7 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}/hydration@${{ steps.build-hydration.outputs.digest }}
       - name: Generate SBOM — Hydration
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
           image: ghcr.io/${{ github.repository }}/hydration@${{ steps.build-hydration.outputs.digest }}
           format: spdx-json
@@ -1281,13 +1281,13 @@ jobs:
             --sbom sbom-hydration.spdx.json \
             ghcr.io/${{ github.repository }}/hydration@${{ steps.build-hydration.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Hydration
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
         with:
           sbom: sbom-hydration.spdx.json
           fail-build: false
           severity-cutoff: critical
       - name: Upload SBOM — Hydration
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: sbom-hydration
           path: sbom-hydration.spdx.json
