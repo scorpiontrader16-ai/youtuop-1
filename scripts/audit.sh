@@ -1607,6 +1607,7 @@ done
 [ "$MIG_DUP_FOUND" -eq 0 ] && pass "No duplicate migration numbers within any service"
 
 # تحقق من فجوات في الترقيم
+ALL_NUMS=$(find services -path "*/migrations/*.sql" 2>/dev/null | awk -F/ '{print $NF}' | grep -oE '^[0-9]+' | sort)
 NUMS=$(echo "$ALL_NUMS" | sort -n | uniq)
 PREV=0
 GAPS=""
@@ -2236,7 +2237,8 @@ if [ -n "$GO_MODS" ]; then
   # Error handling: err ignored with _
   ERR_IGNORED=$(grep -rn ", _\s*:= " --include="*.go" \
     --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
-    grep -v "_test\.go" | wc -l || echo "0")
+    grep -v "_test\.go" | wc -l | tr -d " 	
+" || echo "0")
   if [ "$ERR_IGNORED" -gt 5 ]; then
     finding "HIGH" "Go errors silently discarded (_, _ := pattern)" \
       "$ERR_IGNORED occurrences across Go files" \
@@ -2246,7 +2248,8 @@ if [ -n "$GO_MODS" ]; then
   # panic() in non-test code
   PANICS=$(grep -rn "panic(" --include="*.go" \
     --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
-    grep -v "_test\.go" | grep -v "//.*panic" | wc -l || echo "0")
+    grep -v "_test\.go" | grep -v "//.*panic" | wc -l | tr -d " 	
+" || echo "0")
   if [ "$PANICS" -gt 0 ]; then
     finding "HIGH" "panic() calls in production Go code" \
       "$PANICS occurrences" \
@@ -2255,7 +2258,8 @@ if [ -n "$GO_MODS" ]; then
 
   # TODO/FIXME/HACK count
   TODO_COUNT=$(grep -rn "TODO\|FIXME\|HACK\|XXX" --include="*.go" \
-    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l || echo "0")
+    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
   if [ "$TODO_COUNT" -gt 20 ]; then
     finding "MEDIUM" "High TODO/FIXME debt in Go code" \
       "$TODO_COUNT instances" \
@@ -2266,7 +2270,8 @@ if [ -n "$GO_MODS" ]; then
   CTX_MISSING=$(grep -rn "^func " --include="*.go" \
     --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
     grep -v "context\." | grep -v "func (.*) " | \
-    grep "db\|client\|repo\|service\|handler" | wc -l || echo "0")
+    grep "db\|client\|repo\|service\|handler" | wc -l | tr -d " 	
+" || echo "0")
   if [ "$CTX_MISSING" -gt 3 ]; then
     finding "MEDIUM" "Go functions with DB/client params possibly missing context.Context" \
       "~$CTX_MISSING candidates — verify manually" \
@@ -2301,7 +2306,8 @@ if [ -n "$PY_FILES" ]; then
   # requirements.txt without pinned versions
   REQ_FILES=$(find . -name "requirements*.txt" -not -path "*/.git/*" 2>/dev/null || true)
   for req in $REQ_FILES; do
-    UNPINNED=$(grep -E "^[a-zA-Z]" "$req" | grep -v "==" | grep -v "^#" | wc -l || echo "0")
+    UNPINNED=$(grep -E "^[a-zA-Z]" "$req" | grep -v "==" | grep -v "^#" | wc -l | tr -d " 	
+" || echo "0")
     if [ "$UNPINNED" -gt 2 ]; then
       finding "HIGH" "Python dependencies without pinned versions" \
         "$req ($UNPINNED unpinned)" \
@@ -2311,7 +2317,8 @@ if [ -n "$PY_FILES" ]; then
 
   # bare except
   BARE_EXCEPT=$(grep -rn "except:" --include="*.py" \
-    --exclude-dir=".git" . 2>/dev/null | wc -l || echo "0")
+    --exclude-dir=".git" . 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
   if [ "$BARE_EXCEPT" -gt 0 ]; then
     finding "MEDIUM" "Bare except: clauses in Python (catches BaseException)" \
       "$BARE_EXCEPT occurrences" \
@@ -2320,7 +2327,8 @@ if [ -n "$PY_FILES" ]; then
 
   # no type hints check
   PY_UNTYPED=$(grep -rn "^def " --include="*.py" \
-    --exclude-dir=".git" . 2>/dev/null | grep -v "->" | wc -l || echo "0")
+    --exclude-dir=".git" . 2>/dev/null | grep -v "->" | wc -l | tr -d " 	
+" || echo "0")
   if [ "$PY_UNTYPED" -gt 10 ]; then
     finding "LOW" "Python functions without return type annotations" \
       "$PY_UNTYPED functions" \
@@ -2335,7 +2343,8 @@ if [ -n "$RUST_FILES" ]; then
 
   UNWRAP_COUNT=$(grep -rn "\.unwrap()" --include="*.rs" \
     --exclude-dir=".git" --exclude-dir="target" . 2>/dev/null | \
-    grep -v "_test\|#\[test\]\|#\[cfg(test)\]" | wc -l || echo "0")
+    grep -v "_test\|#\[test\]\|#\[cfg(test)\]" | wc -l | tr -d " 	
+" || echo "0")
   if [ "$UNWRAP_COUNT" -gt 5 ]; then
     finding "HIGH" "Excessive .unwrap() calls in Rust (panics on None/Err)" \
       "$UNWRAP_COUNT occurrences in non-test code" \
@@ -2343,7 +2352,8 @@ if [ -n "$RUST_FILES" ]; then
   fi
 
   CLONE_COUNT=$(grep -rn "\.clone()" --include="*.rs" \
-    --exclude-dir=".git" --exclude-dir="target" . 2>/dev/null | wc -l || echo "0")
+    --exclude-dir=".git" --exclude-dir="target" . 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
   if [ "$CLONE_COUNT" -gt 30 ]; then
     finding "LOW" "High .clone() usage in Rust — possible performance cost" \
       "$CLONE_COUNT occurrences" \
@@ -2412,8 +2422,10 @@ if [ -n "$K8S_FILES" ]; then
   fi
 
   # PodDisruptionBudget — any service without one?
-  SERVICES_WITH_PDB=$(grep -rl "kind: PodDisruptionBudget" ${K8S_FILES} 2>/dev/null | wc -l || echo "0")
-  DEPLOYMENTS=$(echo "$K8S_FILES" | xargs grep -l "kind: Deployment" 2>/dev/null | wc -l || echo "0")
+  SERVICES_WITH_PDB=$(grep -rl "kind: PodDisruptionBudget" ${K8S_FILES} 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
+  DEPLOYMENTS=$(echo "$K8S_FILES" | xargs grep -l "kind: Deployment" 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
   if [ "$DEPLOYMENTS" -gt 0 ] && [ "$SERVICES_WITH_PDB" -eq 0 ]; then
     finding "MEDIUM" "No PodDisruptionBudgets defined" \
       "k8s/ directory" \
@@ -2421,7 +2433,8 @@ if [ -n "$K8S_FILES" ]; then
   fi
 
   # NetworkPolicy
-  NET_POLICIES=$(grep -rl "kind: NetworkPolicy" ${K8S_FILES} 2>/dev/null | wc -l || echo "0")
+  NET_POLICIES=$(grep -rl "kind: NetworkPolicy" ${K8S_FILES} 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
   if [ "$NET_POLICIES" -eq 0 ]; then
     finding "MEDIUM" "No NetworkPolicies found — all pods can communicate freely" \
       "k8s/ directory" \
@@ -2479,7 +2492,8 @@ if [ -d "$WORKFLOW_DIR" ]; then
   # Actions pinned to SHA vs mutable tag
   UNPINNED_ACTIONS=$(grep -rn "uses:.*@" "$WORKFLOW_DIR"/*.yml "$WORKFLOW_DIR"/*.yaml 2>/dev/null | \
     grep -v "@[a-f0-9]\{40\}" | \
-    grep -v "#.*sha\|# sha\|# pinned" | wc -l || echo "0")
+    grep -v "#.*sha\|# sha\|# pinned" | wc -l | tr -d " 	
+" || echo "0")
   if [ "$UNPINNED_ACTIONS" -gt 0 ]; then
     finding "HIGH" "GitHub Actions not pinned to commit SHA" \
       "$UNPINNED_ACTIONS action references using mutable tags (e.g. @v3)" \
@@ -2505,8 +2519,10 @@ if [ -d "$WORKFLOW_DIR" ]; then
   fi
 
   # No caching for package managers
-  HAS_CACHE=$(grep -rl "actions/cache\|cache:" "$WORKFLOW_DIR"/*.yml 2>/dev/null | wc -l || echo "0")
-  TOTAL_WORKFLOWS=$(ls "$WORKFLOW_DIR"/*.yml 2>/dev/null | wc -l || echo "0")
+  HAS_CACHE=$(grep -rl "actions/cache\|cache:" "$WORKFLOW_DIR"/*.yml 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
+  TOTAL_WORKFLOWS=$(ls "$WORKFLOW_DIR"/*.yml 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
   if [ "$TOTAL_WORKFLOWS" -gt 0 ] && [ "$HAS_CACHE" -eq 0 ]; then
     finding "MEDIUM" "No dependency caching in any CI workflow" \
       "$WORKFLOW_DIR" \
@@ -2553,7 +2569,8 @@ GO_LOGS=$(find . -name "*.go" -not -path "*/.git/*" -not -path "*/vendor/*" 2>/d
 if [ -n "$GO_LOGS" ]; then
   FMT_PRINTF=$(grep -rn "fmt\.Printf\|fmt\.Println\|log\.Printf\|log\.Println" --include="*.go" \
     --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
-    grep -v "_test\.go" | wc -l || echo "0")
+    grep -v "_test\.go" | wc -l | tr -d " 	
+" || echo "0")
   if [ "$FMT_PRINTF" -gt 5 ]; then
     finding "HIGH" "Unstructured logging in Go (fmt.Print* / log.Print*)" \
       "$FMT_PRINTF occurrences" \
@@ -2563,7 +2580,8 @@ if [ -n "$GO_LOGS" ]; then
   # Check for trace/span context propagation
   OTEL=$(grep -rn "opentelemetry\|go.opentelemetry.io\|\"go.opentelemetry" \
     --include="*.go" --include="go.mod" \
-    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l || echo "0")
+    --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
   if [ "$OTEL" -eq 0 ]; then
     finding "MEDIUM" "No OpenTelemetry instrumentation found in Go services" \
       "Go services" \
@@ -2576,7 +2594,8 @@ fi
 # Metrics endpoint check
 METRICS_EXPOSED=$(grep -rn "/metrics\|prometheus\|prom_client\|promhttp" \
   --include="*.go" --include="*.py" --include="*.rs" \
-  --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l || echo "0")
+  --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
 if [ "$METRICS_EXPOSED" -eq 0 ]; then
   finding "HIGH" "No Prometheus metrics endpoint found in any service" \
     "All services" \
@@ -2588,7 +2607,8 @@ fi
 # Health endpoints
 HEALTH_ENDPOINTS=$(grep -rn '"/health\|"/healthz\|"/ping\|"/ready\|"/livez"' \
   --include="*.go" --include="*.py" --include="*.rs" \
-  --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l || echo "0")
+  --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | wc -l | tr -d " 	
+" || echo "0")
 if [ "$HEALTH_ENDPOINTS" -eq 0 ]; then
   finding "MEDIUM" "No health check endpoints found (/health, /healthz, /ready)" \
     "All services" \

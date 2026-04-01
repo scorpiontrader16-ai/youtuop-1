@@ -17,7 +17,7 @@ spec:
         app: control-plane
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9095"
+        prometheus.io/port: "9093"
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: control-plane
