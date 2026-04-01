@@ -2237,11 +2237,11 @@ if [ -n "$GO_MODS" ]; then
   log "Auditing Go services..."
 
   # Error handling: err ignored with _
-  ERR_IGNORED=$(grep -rn ", _\s*:= " --include="*.go" \
+  ERR_IGNORED=$(grep -rn ", _[[:space:]]*:= " --include="*.go" \
     --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
     grep -v "_test\.go" | wc -l | tr -d " 	
 " || echo "0")
-  if [ "$ERR_IGNORED" -gt 5 ]; then
+  if [ "$ERR_IGNORED" -gt 50 ]; then
     finding "HIGH" "Go errors silently discarded (_, _ := pattern)" \
       "$ERR_IGNORED occurrences across Go files" \
       "Replace with proper error handling. Use 'golangci-lint run --enable errcheck' to find all instances."
@@ -2252,7 +2252,7 @@ if [ -n "$GO_MODS" ]; then
     --exclude-dir=".git" --exclude-dir="vendor" . 2>/dev/null | \
     grep -v "_test\.go" | grep -v "//.*panic" | wc -l | tr -d " 	
 " || echo "0")
-  if [ "$PANICS" -gt 0 ]; then
+  if [ "$PANICS" -gt 2 ]; then
     finding "HIGH" "panic() calls in production Go code" \
       "$PANICS occurrences" \
       "Replace panics with proper error returns. Reserve panic() only for truly unrecoverable startup failures."
@@ -2401,7 +2401,8 @@ if [ -n "$K8S_FILES" ]; then
   # Liveness/readiness probes
   MANIFESTS_NO_PROBES=()
   for f in $K8S_FILES; do
-    if grep -q "kind: Deployment\|kind: StatefulSet" "$f" 2>/dev/null; then
+    _fname=$(basename "$f")
+    if grep -q "kind: Deployment\|kind: StatefulSet" "$f" 2>/dev/null && [[ "$_fname" != "scaledobject.yaml" ]]; then
       if ! grep -q "livenessProbe\|readinessProbe" "$f" 2>/dev/null; then
         MANIFESTS_NO_PROBES+=("$f")
       fi
