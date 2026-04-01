@@ -10,18 +10,14 @@ main
 
 # Test binary, built with go test -c
 *.test
-
 # Output of go coverage tool
 *.out
 coverage.html
-
 # Go build cache (not workspace cache)
 /vendor/
-
 # ── Rust ─────────────────────────────────────────────────
 /services/processing/target/
 **/*.rs.bk
-
 # ── Python ───────────────────────────────────────────────
 __pycache__/
 *.py[cod]
@@ -37,7 +33,6 @@ build/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
-
 # ── Terraform ────────────────────────────────────────────
 **/.terraform/
 *.tfstate
@@ -47,14 +42,12 @@ build/
 *.tfplan
 override.tf
 override.tf.json
-
 # ── Node.js ──────────────────────────────────────────────
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .npm/
-
 # ── Environment & Secrets ────────────────────────────────
 .env
 .env.*
@@ -66,10 +59,8 @@ yarn-error.log*
 kubeconfig
 kubeconfig.*
 *-kubeconfig.yaml
-
 # ── Docker ───────────────────────────────────────────────
 .docker/
-
 # ── IDE & OS ─────────────────────────────────────────────
 .idea/
 .vscode/
@@ -78,20 +69,16 @@ kubeconfig.*
 *~
 .DS_Store
 Thumbs.db
-
 # ── Generated / Build artifacts ──────────────────────────
 /dist/
 /bin/
 /out/
-
 # ── Kubernetes local overrides ───────────────────────────
 *.local.yaml
 *.local.yml
-
 # ── Compiled service binaries (local builds) ─────────────
 services/hydration/job
 services/tenant-operator/server
-
 # ── Generated audit reports ───────────────────────────────
 audit-report.md
 # ── Vault local init output ───────────────────────────────

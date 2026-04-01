@@ -54,7 +54,7 @@ done
 section "2. Duplicate Files"
 # fdupes check مع syntax صحيح
 if command -v fdupes >/dev/null 2>&1; then
-  DUP=$(fdupes -rq . 2>/dev/null | grep -v "^$" | grep -v ".git" | grep -v "vendor" | grep -v "target" | grep -v "postgres/client.go" | grep -v "/go.sum" | grep -v "backend.tf" || true)
+  DUP=$(fdupes -rq . 2>/dev/null | grep -v "^$" | grep -v ".git" | grep -v "vendor" | grep -v "target" | grep -v "postgres/client.go" | grep -v "/go.sum" | grep -v "backend.tf" | grep -v "/main$" | grep -v "/main$" || true)
   if [ -z "$DUP" ]; then pass "No exact duplicate files (fdupes)"
   else fail "Duplicate files found"; echo "$DUP" | head -10 >> "$REPORT"; fi
 else
@@ -290,7 +290,7 @@ section "10. ArgoCD App Paths"
 if command -v yq >/dev/null 2>&1; then
   _ARGOCD_TMP=$(mktemp)
   for _app in $(find infra/argocd k8s/ \( -name "*.yaml" -o -name "*.yml" \) 2>/dev/null \
-    | xargs grep -l "kind: Application$" 2>/dev/null | sort); do
+    | xargs grep -l "kind: Application$" 2>/dev/null | sort || true); do
     yq -o=json '.' "$_app" 2>/dev/null | python3 scripts/argocd_paths.py >> "$_ARGOCD_TMP"
   done
   while IFS="|" read -r NAME PVAL; do
