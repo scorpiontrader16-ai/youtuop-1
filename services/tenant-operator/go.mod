@@ -7,7 +7,7 @@ toolchain go1.24.13
 require (
 	github.com/grafana/pyroscope-go v1.2.8
 	github.com/jackc/pgx/v5 v5.5.5
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0
 	k8s.io/client-go v0.32.0
