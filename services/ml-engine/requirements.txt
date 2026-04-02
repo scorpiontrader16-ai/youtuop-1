@@ -10,7 +10,7 @@ lightgbm==4.6.0
 torch==2.6.0
 transformers==4.48.0
 onnxruntime==1.19.2
-numpy==2.1.1
+numpy==2.4.4
 pandas==2.2.3
 
 # DB + Cache
