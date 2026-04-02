@@ -1,4 +1,4 @@
-# youtuop-1 — منصة تحليل البيانات الاقتصادية
+# AmniX Finance — The Global Financial Intelligence Platform    
 
 > Kubernetes ARM64 + GitOps + Zero Trust + Go + Rust
 
