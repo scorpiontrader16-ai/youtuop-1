@@ -3,13 +3,20 @@ package main
 import (
 	"github.com/scorpiontrader16-ai/youtuop-1/services/realtime/internal/profiling"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -89,6 +96,92 @@ type Claims struct {
 }
 
 func (c *Claims) UserID() string { return c.Subject }
+
+// ── JWKS Cache ─────────────────────────────────────────────────────────────
+// نستبدل ParseUnverified بـ JWKS verification — يتحقق من الـ signature فعلياً
+type jwksCache struct {
+	mu       sync.RWMutex
+	keys     map[string]any
+	endpoint string
+	expiry   time.Time
+}
+
+func newJWKSCache(endpoint string) *jwksCache {
+	return &jwksCache{endpoint: endpoint, keys: make(map[string]any)}
+}
+
+func (c *jwksCache) getKey(kid string) (any, error) {
+	c.mu.RLock()
+	if time.Now().Before(c.expiry) {
+		if key, ok := c.keys[kid]; ok {
+			c.mu.RUnlock()
+			return key, nil
+		}
+	}
+	c.mu.RUnlock()
+	return c.refresh(kid)
+}
+
+func (c *jwksCache) refresh(kid string) (any, error) {
+	resp, err := http.Get(c.endpoint) //nolint:noctx
+	if err != nil {
+		return nil, fmt.Errorf("fetch jwks: %w", err)
+	}
+	defer resp.Body.Close()
+	var set struct {
+		Keys []json.RawMessage `json:"keys"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&set); err != nil {
+		return nil, fmt.Errorf("decode jwks: %w", err)
+	}
+	c.mu.Lock()
+	c.keys = make(map[string]any)
+	for _, raw := range set.Keys {
+		var hdr struct {
+			Kid string `json:"kid"`
+			Kty string `json:"kty"`
+			N   string `json:"n"`
+			E   string `json:"e"`
+			X   string `json:"x"`
+			Y   string `json:"y"`
+		}
+		if err := json.Unmarshal(raw, &hdr); err != nil {
+			continue
+		}
+		switch hdr.Kty {
+		case "RSA":
+			if key, err := jwkRSA(hdr.N, hdr.E); err == nil {
+				c.keys[hdr.Kid] = key
+			}
+		case "EC":
+			if key, err := jwkEC(hdr.X, hdr.Y); err == nil {
+				c.keys[hdr.Kid] = key
+			}
+		}
+	}
+	c.expiry = time.Now().Add(5 * time.Minute)
+	c.mu.Unlock()
+	if key, ok := c.keys[kid]; ok {
+		return key, nil
+	}
+	return nil, fmt.Errorf("kid %q not found in jwks", kid)
+}
+
+func jwkRSA(nB64, eB64 string) (*rsa.PublicKey, error) {
+	nb, err := base64.RawURLEncoding.DecodeString(nB64)
+	if err != nil { return nil, err }
+	eb, err := base64.RawURLEncoding.DecodeString(eB64)
+	if err != nil { return nil, err }
+	return &rsa.PublicKey{N: new(big.Int).SetBytes(nb), E: int(new(big.Int).SetBytes(eb).Int64())}, nil
+}
+
+func jwkEC(xB64, yB64 string) (*ecdsa.PublicKey, error) {
+	xb, err := base64.RawURLEncoding.DecodeString(xB64)
+	if err != nil { return nil, err }
+	yb, err := base64.RawURLEncoding.DecodeString(yB64)
+	if err != nil { return nil, err }
+	return &ecdsa.PublicKey{Curve: elliptic.P256(), X: new(big.Int).SetBytes(xb), Y: new(big.Int).SetBytes(yb)}, nil
+}
 
 func main() {
 	log, err := zap.NewProduction()
@@ -198,6 +291,7 @@ func main() {
 // ── WebSocket Handler ─────────────────────────────────────────────────────
 
 func makeWSHandler(cfg Config, h *hub.Hub, log *zap.Logger) http.HandlerFunc {
+	cache := newJWKSCache(cfg.JWKSEndpoint)
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 1. Extract and validate JWT
 		token := r.URL.Query().Get("token")
@@ -209,7 +303,7 @@ func makeWSHandler(cfg Config, h *hub.Hub, log *zap.Logger) http.HandlerFunc {
 			return
 		}
 
-		claims, err := validateJWT(token, cfg.JWTIssuer)
+		claims, err := validateJWT(token, cfg.JWTIssuer, cache)
 		if err != nil {
 			log.Warn("invalid JWT", zap.Error(err))
 			http.Error(w, "invalid token", http.StatusUnauthorized)
@@ -294,26 +388,31 @@ func makeWSHandler(cfg Config, h *hub.Hub, log *zap.Logger) http.HandlerFunc {
 	}
 }
 
-// validateJWT — يتحقق من الـ JWT بدون JWKS lookup (بيستخدم الـ public key من env)
-// في الـ production، الـ Envoy Gateway بيتحقق من الـ JWT قبل ما يوصل هنا
-// ده second-layer validation للـ WebSocket connections
-func validateJWT(tokenStr, issuer string) (*Claims, error) {
-	// الـ WebSocket connections بتيجي بعد ما الـ Gateway يتحقق منها
-	// لكن لو جه مباشرة بنتحقق من الـ claims بدون signature (للـ dev mode)
-	// في الـ production، الـ claims بتيجي من الـ Gateway headers
-	t, _, err := jwt.NewParser().ParseUnverified(tokenStr, &Claims{})
+// validateJWT — يتحقق من الـ JWT signature عبر JWKS من auth service
+// يدعم RS256 و ES256 — يرفض أي method آخر بما فيه "none"
+func validateJWT(tokenStr, issuer string, cache *jwksCache) (*Claims, error) {
+	t, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (any, error) {
+		switch t.Method.(type) {
+		case *jwt.SigningMethodRSA:
+		case *jwt.SigningMethodECDSA:
+		default:
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		kid, _ := t.Header["kid"].(string)
+		return cache.getKey(kid)
+	}, jwt.WithIssuer(issuer), jwt.WithExpirationRequired())
 	if err != nil {
-		return nil, fmt.Errorf("parse token: %w", err)
+		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 	claims, ok := t.Claims.(*Claims)
-	if !ok {
-		return nil, fmt.Errorf("invalid claims")
+	if !ok || !t.Valid {
+		return nil, errors.New("malformed claims")
 	}
 	if claims.TenantID == "" {
-		return nil, fmt.Errorf("missing tenant_id claim")
+		return nil, errors.New("missing tenant_id claim")
 	}
 	if claims.Subject == "" {
-		return nil, fmt.Errorf("missing sub claim")
+		return nil, errors.New("missing sub claim")
 	}
 	return claims, nil
 }
