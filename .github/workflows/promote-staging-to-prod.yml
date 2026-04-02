@@ -111,12 +111,15 @@ jobs:
 
       - name: Validate inputs
         id: validate
+        env:
+          INPUT_SERVICE: ${{ github.event.inputs.service }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
           IFS=$'\n\t'
 
-          SERVICE="${{ github.event.inputs.service }}"
-          VERSION="${{ github.event.inputs.version }}"
+          SERVICE="${INPUT_SERVICE}"
+          VERSION="${INPUT_VERSION}"
           VERSION="${VERSION#v}"
           PROD_FILE="k8s/overlays/production/${SERVICE}/kustomization.yaml"
 
@@ -173,6 +176,8 @@ jobs:
           cat "${PROD_FILE}"
 
       - name: Commit and push
+        env:
+          INPUT_REASON: ${{ github.event.inputs.reason }}
         run: |
           set -euo pipefail
           IFS=$'\n\t'
@@ -180,7 +185,7 @@ jobs:
           SERVICE="${{ steps.validate.outputs.service }}"
           VERSION="${{ steps.validate.outputs.version }}"
           FROM="${{ steps.current.outputs.current_version }}"
-          REASON="${{ github.event.inputs.reason }}"
+          REASON="${INPUT_REASON}"
           PROD_FILE="${{ steps.validate.outputs.prod_file }}"
 
           git add "${PROD_FILE}"
@@ -211,6 +216,8 @@ jobs:
           done
 
       - name: Summary
+        env:
+          INPUT_REASON: ${{ github.event.inputs.reason }}
         run: |
           set -euo pipefail
           SERVICE="${{ steps.validate.outputs.service }}"
@@ -225,6 +232,6 @@ jobs:
           echo "| From | ${FROM} |" >> "${GITHUB_STEP_SUMMARY}"
           echo "| To | ${VERSION} |" >> "${GITHUB_STEP_SUMMARY}"
           echo "| Promoted by | @${{ github.actor }} |" >> "${GITHUB_STEP_SUMMARY}"
-          echo "| Reason | ${{ github.event.inputs.reason }} |" >> "${GITHUB_STEP_SUMMARY}"
+          echo "| Reason | ${INPUT_REASON} |" >> "${GITHUB_STEP_SUMMARY}"
           echo "" >> "${GITHUB_STEP_SUMMARY}"
           echo "ArgoCD will sync automatically within 3 minutes." >> "${GITHUB_STEP_SUMMARY}"
