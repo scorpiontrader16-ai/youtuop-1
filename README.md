@@ -1,5 +1,32 @@
 # AmniX Finance — The Global Financial Intelligence Platform    
 
+## What is AmniX Finance?
+
+AmniX Finance is a real-time global financial intelligence platform 
+powered by 47 AI agents and 300+ aggregated data sources covering 
+markets worldwide.
+
+Unlike raw data terminals, AmniX doesn't just show you numbers — 
+it tells you **what they mean**. When a piece of news breaks or an 
+economic indicator is released, AmniX instantly maps its potential 
+impact across assets: equities, commodities, currencies, ETFs, and 
+investment funds — across any market, in any region.
+
+### Who is it for?
+- 📊 **Traders & Analysts** — real-time cross-market impact analysis
+- 🏦 **Portfolio Managers** — macro event correlation at scale  
+- 🌍 **Investment Funds** — global coverage from 300+ data sources
+- 🚀 **Fintech Startups** — AI-powered financial intelligence via API
+
+### Core Stats
+| | |
+|---|---|
+| AI Agents | 47 specialized agents |
+| Data Sources | 300+ global sources |
+| Markets Covered | Equities, Commodities, Currencies, Funds |
+| Infrastructure | Go · Rust · Kubernetes/EKS · AWS · Redpanda |
+
+> *"Not a data platform. An intelligence layer for global markets."*
 > Kubernetes ARM64 + GitOps + Zero Trust + Go + Rust
 
 ---
