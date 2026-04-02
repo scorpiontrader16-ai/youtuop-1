@@ -39,7 +39,7 @@ module "vpc" {
   source          = "../../modules/networking"
   name            = "platform-eu"
   cidr            = "10.2.0.0/16"
-  azs             = ["eu-west-1a", "eu-west-1b", "eu-west-1c"]
+  azs             = var.availability_zones
   private_subnets = ["10.2.1.0/24", "10.2.2.0/24", "10.2.3.0/24"]
   public_subnets  = ["10.2.101.0/24", "10.2.102.0/24", "10.2.103.0/24"]
   cluster_name    = var.cluster_name
