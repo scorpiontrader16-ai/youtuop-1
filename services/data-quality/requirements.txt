@@ -4,7 +4,7 @@ soda-core-postgres==3.3.3
 # API
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
-pydantic==2.9.0
+pydantic==2.12.5
 pydantic-settings==2.4.0
 # DB
 asyncpg==0.29.0
