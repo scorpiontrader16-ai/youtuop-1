@@ -31,8 +31,10 @@ func main() {
 	defer logger.Sync() //nolint:errcheck
 
 	// ── PostgreSQL ────────────────────────────────────────────────────
-	pgConn := getEnv("POSTGRES_CONN",
-		"postgres://postgres:postgres@postgres.platform.svc.cluster.local:5432/platform?sslmode=disable")
+	pgConn := os.Getenv("POSTGRES_CONN")
+	if pgConn == "" {
+		logger.Fatal("POSTGRES_CONN is required — set via ExternalSecret")
+	}
 
 	pool, err := pgxpool.New(context.Background(), pgConn)
 	if err != nil {
@@ -111,9 +113,4 @@ func reconcile(ctx context.Context, pool *pgxpool.Pool, p *onboarding.Provisione
 	return nil
 }
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
+

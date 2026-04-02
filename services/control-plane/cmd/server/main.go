@@ -46,7 +46,8 @@ func main() {
 
     pgConn := os.Getenv("POSTGRES_CONN")
     if pgConn == "" {
-        pgConn = "postgres://postgres:postgres@postgres.platform.svc.cluster.local:5432/platform?sslmode=disable"
+        slog.Error("POSTGRES_CONN is required — set via ExternalSecret")
+        os.Exit(1)
     }
     pool, err := pgxpool.New(context.Background(), pgConn)
     if err != nil {
