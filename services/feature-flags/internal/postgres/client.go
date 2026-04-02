@@ -37,13 +37,20 @@ type Config struct {
 }
 
 func ConfigFromEnv() Config {
+	// PostgreSQL password must be injected from ExternalSecrets (AWS Secrets Manager)
+	// Never use hardcoded or default passwords — fail fast at startup to prevent
+	// security issues from weak credentials reaching production.
+	password := getEnv("POSTGRES_PASSWORD", "")
+	if password == "" {
+		panic("CRITICAL: POSTGRES_PASSWORD environment variable is required but not set")
+	}
 	return Config{
 		Host:         getEnv("POSTGRES_HOST", "localhost"),
 		Port:         getEnvInt("POSTGRES_PORT", 5432),
 		Database:     getEnv("POSTGRES_DB", "platform"),
 		User:         getEnv("POSTGRES_USER", "platform"),
-		Password:     getEnv("POSTGRES_PASSWORD", "platform"),
-		SSLMode:      getEnv("POSTGRES_SSL_MODE", "disable"),
+		Password:     password,
+		SSLMode:      getEnv("POSTGRES_SSL_MODE", "require"),
 		MaxOpenConns: getEnvInt("POSTGRES_MAX_OPEN_CONNS", 10),
 		MaxIdleConns: getEnvInt("POSTGRES_MAX_IDLE_CONNS", 3),
 		ConnLifetime: time.Hour,

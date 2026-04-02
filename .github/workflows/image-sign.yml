@@ -41,6 +41,7 @@ jobs:
   build-sign-ingestion:
     name: Build, Sign & SBOM — Ingestion
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -127,6 +128,7 @@ jobs:
   build-sign-processing:
     name: Build, Sign & SBOM — Processing
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -213,6 +215,7 @@ jobs:
   build-sign-auth:
     name: Build, Sign & SBOM — Auth
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -299,6 +302,7 @@ jobs:
   build-sign-billing:
     name: Build, Sign & SBOM — Billing
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -385,6 +389,7 @@ jobs:
   build-sign-notifications:
     name: Build, Sign & SBOM — Notifications
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -471,6 +476,7 @@ jobs:
   build-sign-analytics:
     name: Build, Sign & SBOM — Analytics
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -771,6 +777,7 @@ jobs:
   build-sign-jobs:
     name: Build, Sign & SBOM — Jobs
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -846,6 +853,7 @@ jobs:
   build-sign-realtime:
     name: Build, Sign & SBOM — Realtime
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -921,6 +929,7 @@ jobs:
   build-sign-search:
     name: Build, Sign & SBOM — Search
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -1146,6 +1155,7 @@ jobs:
   build-sign-data-quality:
     name: Build, Sign & SBOM — Data Quality
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -1221,6 +1231,7 @@ jobs:
   build-sign-hydration:
     name: Build, Sign & SBOM — Hydration
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write

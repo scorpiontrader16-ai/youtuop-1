@@ -80,6 +80,7 @@ jobs:
   promote:
     name: Promote ${{ github.event.inputs.service }} to production
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       packages: read

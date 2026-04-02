@@ -18,6 +18,7 @@ jobs:
   breaking:
     name: Proto Breaking Change Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write

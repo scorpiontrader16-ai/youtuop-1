@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
@@ -14,8 +15,8 @@ class Settings(BaseSettings):
     postgres_port: int = 5432
     postgres_db: str = "platform"
     postgres_user: str = "platform"
-    postgres_password: str = "platform"
-    postgres_ssl_mode: str = "disable"
+    postgres_password: str = ""  # لازم يجيء من POSTGRES_PASSWORD env var
+    postgres_ssl_mode: str = "require"  # TLS مطلوب
 
     # Redis (feature cache)
     redis_addr: str = "redis:6379"
@@ -37,6 +38,16 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+
+    @field_validator("postgres_password")
+    @classmethod
+    def validate_postgres_password(cls, v: str) -> str:
+        # PostgreSQL password must be injected from ExternalSecrets (AWS Secrets Manager)
+        # Never use hardcoded or default passwords — fail at startup to prevent
+        # security issues from weak credentials reaching production.
+        if not v or v.strip() == "":
+            raise ValueError("CRITICAL: POSTGRES_PASSWORD environment variable is required but not set")
+        return v
 
     @property
     def postgres_dsn(self) -> str:

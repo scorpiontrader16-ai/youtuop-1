@@ -29,6 +29,7 @@ jobs:
   version:
     name: Calculate Version
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       new_version: ${{ steps.semver.outputs.new_version }}
       tag: ${{ steps.semver.outputs.tag }}

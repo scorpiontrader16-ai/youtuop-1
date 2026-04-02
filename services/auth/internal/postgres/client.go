@@ -32,13 +32,20 @@ func ConfigFromEnv() Config {
 		slog.Warn("POSTGRES_PORT is not a valid integer, using default 5432", "value", getEnv("POSTGRES_PORT", "5432"))
 		port = 5432
 	}
+	// PostgreSQL password must be injected from ExternalSecrets (AWS Secrets Manager)
+	// Never use hardcoded or default passwords — fail fast at startup to prevent
+	// security issues from weak credentials reaching production.
+	password := getEnv("POSTGRES_PASSWORD", "")
+	if password == "" {
+		panic("CRITICAL: POSTGRES_PASSWORD environment variable is required but not set")
+	}
 	return Config{
 		Host:     getEnv("POSTGRES_HOST", "postgres.platform.svc.cluster.local"),
 		Port:     port,
 		User:     getEnv("POSTGRES_USER", "postgres"),
-		Password: getEnv("POSTGRES_PASSWORD", "postgres"),
+		Password: password,
 		Database: getEnv("POSTGRES_DB", "platform"),
-		SSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
+		SSLMode:  getEnv("POSTGRES_SSL_MODE", "require"),
 	}
 }
 
