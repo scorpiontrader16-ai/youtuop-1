@@ -53,18 +53,3 @@ func (b *BruteForceProtection) IsBlocked(ctx context.Context, userID, ip string)
 func (b *BruteForceProtection) RecordFailure(ctx context.Context, userID, ip string) {
     _ = b.db.RecordFailedLogin(ctx, userID, ip)
 }
-
-// IsBlocked – يتحقق فقط إذا كان المستخدم محجوبًا بدون تسجيل محاولة
-// استخدم هذا قبل bcrypt — استخدم RecordFailure بعد فشل bcrypt فقط
-func (b *BruteForceProtection) IsBlocked(ctx context.Context, userID, ip string) (bool, error) {
-    count, err := b.db.CountFailedAttempts(ctx, userID, ip, 15*time.Minute)
-    if err != nil {
-        return false, err
-    }
-    return count >= 5, nil
-}
-
-// RecordFailure – يسجل محاولة فاشلة بعد التحقق من فشل bcrypt
-func (b *BruteForceProtection) RecordFailure(ctx context.Context, userID, ip string) {
-    _ = b.db.RecordFailedLogin(ctx, userID, ip)
-}

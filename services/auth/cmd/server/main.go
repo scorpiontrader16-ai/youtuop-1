@@ -494,19 +494,22 @@ func makePasswordLoginHandler(pg *postgres.Client, jwtSvc *appjwt.Service, rbacE
 		}
 		user, err := pg.GetUserByEmail(ctx, req.Email)
 		if err != nil {
-			bruteForce.CheckAndRecord(ctx, "", r.RemoteAddr)
+			// لا نكشف إذا كان الـ email موجود — timing-safe
 			jsonError(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
-		ok, err := bruteForce.CheckAndRecord(ctx, user.ID, r.RemoteAddr)
+		// تحقق من الحجب قبل bcrypt — لا نسجل محاولة هنا
+		blocked, err := bruteForce.IsBlocked(ctx, user.ID, r.RemoteAddr)
 		if err != nil {
 			log.Error("brute force check", zap.Error(err))
 		}
-		if !ok {
+		if blocked {
 			jsonError(w, "too many attempts, try later", http.StatusTooManyRequests)
 			return
 		}
+		// نسجل الفشل فقط بعد فشل bcrypt
 		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+			bruteForce.RecordFailure(ctx, user.ID, r.RemoteAddr)
 			jsonError(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
