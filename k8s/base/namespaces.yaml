@@ -8,6 +8,13 @@ metadata:
   name: platform
   labels:
     name: platform
+    # PSS restricted — كل السيرفسات لها securityContext كامل + Kyverno يفرض الباقي
+    # enforce يرفض أي pod لا يلتزم، audit+warn للمراقبة
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
 ---
 apiVersion: v1
 kind: Namespace
@@ -15,6 +22,13 @@ metadata:
   name: monitoring
   labels:
     name: monitoring
+    # PSS baseline — Kyverno exceptions تعفي monitoring من بعض restricted requirements
+    # audit+warn restricted للكشف المبكر دون كسر المكونات الحالية
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    app.kubernetes.io/part-of: youtuop-platform
+    app.kubernetes.io/managed-by: kustomize
 ---
 # ── Falco Runtime Security ────────────────────────────────────────────────────
 # modern_ebpf يتطلب CAP_SYS_ADMIN + CAP_SYS_PTRACE + CAP_SYS_RESOURCE
