@@ -12,7 +12,7 @@ sqlalchemy[asyncio]==2.0.36
 # Observability — مقيدة بما يسمحه soda-core (يتطلب <1.23.0)
 opentelemetry-api==1.22.0
 opentelemetry-sdk==1.22.0
-opentelemetry-exporter-otlp-proto-grpc==1.22.0
+opentelemetry-exporter-otlp-proto-grpc==1.40.0
 prometheus-client==0.21.0
 # Utils
 python-json-logger==2.0.7
