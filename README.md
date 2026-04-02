@@ -62,7 +62,8 @@ Search for `scorpiontrader16-ai` and replace with your GitHub org/username.
 git init
 git add .
 git commit -m "feat: initial platform infrastructure"
-git remote add origin https://github.com/scorpiontrader16-ai/youtuop-1.git
+git remote add origin https://github.com/scorpiontrader16-ai/AmniX-Finance
+.git
 git push -u origin main
 ```
 
@@ -204,7 +205,7 @@ All services **require** the following environment variables to be explicitly se
 ## Repository Structure
 
 ```
-youtuop-1/
+AmniX-Finance/
 ├── .github/workflows/       # CI/CD (7 workflows)
 ├── infra/
 │   ├── argocd/apps/         # GitOps App of Apps
