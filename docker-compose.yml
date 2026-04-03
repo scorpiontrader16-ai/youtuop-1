@@ -33,14 +33,14 @@ services:
       - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
       - --rpc-addr redpanda:33145
       - --advertise-rpc-addr redpanda:33145
-      - --smp 1
+      - --smp 1  # M-08: Single core for dev — use --smp <cores> in production
       - --memory 1G
       - --mode dev-container
       - --default-log-level=warn
     ports:
-      - "19092:19092"   # Kafka external
-      - "18081:18081"   # Schema Registry external
-      - "9644:9644"     # Admin API
+      - "127.0.0.1:19092:19092"   # Kafka external — localhost only
+      - "127.0.0.1:18081:18081"   # Schema Registry external — localhost only
+      - "127.0.0.1:9644:9644"     # Admin API — localhost only
     volumes:
       - redpanda_data:/var/lib/redpanda/data
     healthcheck:
@@ -203,13 +203,16 @@ services:
     image: grafana/grafana:11.4.0
     container_name: grafana
     ports:
-      - "3000:3000"   # Web UI → http://localhost:3000
+      - "127.0.0.1:3000:3000"   # Web UI — localhost only
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?GRAFANA_ADMIN_USER must be set in .env}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set in .env}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./scripts/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./scripts/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./scripts/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - clickhouse
       - postgres
