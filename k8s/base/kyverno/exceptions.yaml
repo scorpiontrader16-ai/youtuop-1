@@ -46,3 +46,29 @@ spec:
           selector:
             matchLabels:
               app: mirrormaker2
+---
+# H-04 Fix: PolicyException for services requiring automountServiceAccountToken
+# ingestion, ml-engine, tenant-operator need SA token mounted for:
+#   - Vault kubernetes auth (IRSA)
+#   - AWS IRSA credentials via projected SA token
+# Without this exception, Kyverno disallow-automount-sa-token policy
+# blocks these pods from starting, breaking their Vault integration.
+apiVersion: kyverno.io/v2beta1
+kind: PolicyException
+metadata:
+  name: vault-irsa-automount
+  namespace: platform
+spec:
+  exceptions:
+    - policyName: disallow-automount-sa-token
+      ruleNames: [check-automount-sa-token]
+  match:
+    any:
+      - resources:
+          kinds: [Pod]
+          namespaces: [platform]
+          selector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [ingestion, ml-engine, tenant-operator]
