@@ -256,3 +256,59 @@ customRules:
       priority: CRITICAL
       tags: [platform, privilege-escalation, container-escape, T1548]
       source: syscall
+
+    # ══════════════════════════════════════════════════════════════════════
+    # M-01 Fix: Additional MITRE ATT&CK Coverage Rules
+    # ══════════════════════════════════════════════════════════════════════
+
+    - rule: AWS Metadata Service Access from Platform Container
+      desc: >
+        Detects attempts to contact the AWS EC2 metadata service (169.254.169.254).
+        Common technique for SSRF-based credential theft in cloud environments.
+      condition: >
+        outbound and
+        container and
+        k8s.ns.name in (platform, platform-prod) and
+        fd.rip = "169.254.169.254"
+      output: >
+        AWS metadata access attempt
+        (proc=%proc.name pod=%k8s.pod.name ns=%k8s.ns.name
+        cmd=%proc.cmdline image=%container.image.repository)
+      priority: CRITICAL
+      tags: [platform, cloud, credential-theft, T1552.005]
+      source: syscall
+
+    - rule: Kubernetes API Access from Platform Container
+      desc: >
+        Detects processes calling the Kubernetes API server from platform pods.
+        Legitimate services should not make direct API calls at runtime.
+      condition: >
+        outbound and
+        container and
+        k8s.ns.name in (platform, platform-prod) and
+        fd.rport = 443 and
+        fd.rip = "10.96.0.1"
+      output: >
+        K8s API call from platform container
+        (proc=%proc.name pod=%k8s.pod.name ns=%k8s.ns.name cmd=%proc.cmdline)
+      priority: WARNING
+      tags: [platform, lateral-movement, T1552.007]
+      source: syscall
+
+    - rule: Sensitive File Read in Platform Container
+      desc: >
+        Detects reading of Kubernetes service account tokens or other
+        sensitive files that should not be accessed at runtime.
+      condition: >
+        open_read and
+        container and
+        k8s.ns.name in (platform, platform-prod) and
+        (fd.name startswith /var/run/secrets/kubernetes.io or
+         fd.name startswith /etc/shadow or
+         fd.name startswith /etc/passwd)
+      output: >
+        Sensitive file read in platform container
+        (proc=%proc.name pod=%k8s.pod.name file=%fd.name cmd=%proc.cmdline)
+      priority: WARNING
+      tags: [platform, credential-access, T1083]
+      source: syscall
