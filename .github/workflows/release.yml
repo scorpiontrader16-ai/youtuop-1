@@ -43,6 +43,7 @@ permissions:
   contents: write
   packages: write
   id-token: write
+  attestations: write
 
 jobs:
   # ─── حساب الـ version ────────────────────────────────────
@@ -232,6 +233,13 @@ jobs:
           cosign sign --yes \
             ${{ env.REPO }}/${{ matrix.service }}@${{ steps.build.outputs.digest }}
 
+
+      - name: Generate SLSA provenance — ${{ matrix.service }}
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/${{ matrix.service }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
       - name: Save digest for overlay update
         run: |
           mkdir -p /tmp/digests

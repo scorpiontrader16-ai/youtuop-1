@@ -38,6 +38,7 @@ permissions:
   contents: read
   packages: write
   id-token: write
+  attestations: write
 
 jobs:
 
@@ -49,6 +50,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -101,6 +103,13 @@ jobs:
           cosign sign --yes \
             ${{ env.REPO }}/ingestion@${{ steps.build-ingestion.outputs.digest }}
 
+
+      - name: Generate SLSA provenance — Ingestion
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/ingestion
+          subject-digest: ${{ steps.build-ingestion.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Ingestion
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -136,6 +145,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -188,6 +198,13 @@ jobs:
           cosign sign --yes \
             ${{ env.REPO }}/processing@${{ steps.build-processing.outputs.digest }}
 
+
+      - name: Generate SLSA provenance — Processing
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/processing
+          subject-digest: ${{ steps.build-processing.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Processing
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -223,6 +240,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -275,6 +293,13 @@ jobs:
           cosign sign --yes \
             ${{ env.REPO }}/auth@${{ steps.build-auth.outputs.digest }}
 
+
+      - name: Generate SLSA provenance — Auth
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/auth
+          subject-digest: ${{ steps.build-auth.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Auth
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -310,6 +335,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -362,6 +388,13 @@ jobs:
           cosign sign --yes \
             ${{ env.REPO }}/billing@${{ steps.build-billing.outputs.digest }}
 
+
+      - name: Generate SLSA provenance — Billing
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/billing
+          subject-digest: ${{ steps.build-billing.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Billing
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -397,6 +430,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -449,6 +483,13 @@ jobs:
           cosign sign --yes \
             ${{ env.REPO }}/notifications@${{ steps.build-notifications.outputs.digest }}
 
+
+      - name: Generate SLSA provenance — Notifications
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/notifications
+          subject-digest: ${{ steps.build-notifications.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Notifications
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -484,6 +525,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -528,6 +570,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/analytics@${{ steps.build-analytics.outputs.digest }}
+
+      - name: Generate SLSA provenance — Analytics
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/analytics
+          subject-digest: ${{ steps.build-analytics.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Analytics
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -559,6 +608,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -603,6 +653,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/control-plane@${{ steps.build-control-plane.outputs.digest }}
+
+      - name: Generate SLSA provenance — Control-Plane
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/control-plane
+          subject-digest: ${{ steps.build-control-plane.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Control-Plane
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -634,6 +691,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -678,6 +736,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/developer-portal@${{ steps.build-developer-portal.outputs.digest }}
+
+      - name: Generate SLSA provenance — Developer-Portal
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/developer-portal
+          subject-digest: ${{ steps.build-developer-portal.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Developer-Portal
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -709,6 +774,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -753,6 +819,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/feature-flags@${{ steps.build-feature-flags.outputs.digest }}
+
+      - name: Generate SLSA provenance — Feature-Flags
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/feature-flags
+          subject-digest: ${{ steps.build-feature-flags.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Feature-Flags
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -785,6 +858,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -829,6 +903,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/jobs@${{ steps.build-jobs.outputs.digest }}
+
+      - name: Generate SLSA provenance — Jobs
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/jobs
+          subject-digest: ${{ steps.build-jobs.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Jobs
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -861,6 +942,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -905,6 +987,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/realtime@${{ steps.build-realtime.outputs.digest }}
+
+      - name: Generate SLSA provenance — Realtime
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/realtime
+          subject-digest: ${{ steps.build-realtime.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Realtime
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -937,6 +1026,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -981,6 +1071,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/search@${{ steps.build-search.outputs.digest }}
+
+      - name: Generate SLSA provenance — Search
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/search
+          subject-digest: ${{ steps.build-search.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Search
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -1012,6 +1109,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -1056,6 +1154,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/tenant-operator@${{ steps.build-tenant-operator.outputs.digest }}
+
+      - name: Generate SLSA provenance — Tenant-Operator
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/tenant-operator
+          subject-digest: ${{ steps.build-tenant-operator.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Tenant-Operator
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -1087,6 +1192,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -1131,6 +1237,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/ml-engine@${{ steps.build-ml-engine.outputs.digest }}
+
+      - name: Generate SLSA provenance — ML-Engine
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/ml-engine
+          subject-digest: ${{ steps.build-ml-engine.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — ML-Engine
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -1163,6 +1276,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -1207,6 +1321,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/data-quality@${{ steps.build-data-quality.outputs.digest }}
+
+      - name: Generate SLSA provenance — Data Quality
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/data quality
+          subject-digest: ${{ steps.build-data quality.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Data Quality
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
@@ -1239,6 +1360,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
@@ -1283,6 +1405,13 @@ jobs:
         run: |
           cosign sign --yes \
             ${{ env.REPO }}/hydration@${{ steps.build-hydration.outputs.digest }}
+
+      - name: Generate SLSA provenance — Hydration
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REPO }}/hydration
+          subject-digest: ${{ steps.build-hydration.outputs.digest }}
+          push-to-registry: true
       - name: Generate SBOM — Hydration
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
         with:
