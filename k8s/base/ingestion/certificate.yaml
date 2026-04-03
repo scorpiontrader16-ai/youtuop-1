@@ -17,7 +17,7 @@ metadata:
 spec:
   secretName: ingestion-tls-secret
   duration: 2160h
-  renewBefore: 360h
+  renewBefore: 720h
   isCA: false
   privateKey:
     algorithm: ECDSA

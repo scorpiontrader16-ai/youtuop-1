@@ -12,7 +12,7 @@ metadata:
 spec:
   secretName: auth-tls-secret
   duration: 2160h
-  renewBefore: 360h
+  renewBefore: 720h
   isCA: false
   privateKey:
     algorithm: ECDSA
