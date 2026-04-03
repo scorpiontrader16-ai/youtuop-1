@@ -23,22 +23,13 @@ variable "namespace" {
   default = "platform"
 }
 
-resource "aws_iam_role" "vault" {
-  name = "${var.cluster_name}-vault"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-  tags = { Environment = var.environment }
-}
+# H-05: ec2-based vault IAM role removed — all policies migrated to vault_irsa (OIDC)
+# This eliminates the ec2 principal which allowed any EC2 instance to assume the role
 
 resource "aws_iam_role_policy" "vault_kms" {
   name = "vault-kms-unseal"
-  role = aws_iam_role.vault.id
+  # H-05: migrated from ec2 vault role to OIDC vault_irsa role
+  role = aws_iam_role.vault_irsa.name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -78,7 +69,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "vault" {
 
 resource "aws_iam_role_policy" "vault_s3" {
   name = "vault-s3"
-  role = aws_iam_role.vault.id
+  # H-05: migrated from ec2 vault role to OIDC vault_irsa role
+  role = aws_iam_role.vault_irsa.name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -118,10 +110,8 @@ resource "aws_iam_role" "vault_irsa" {
   tags = { Environment = var.environment }
 }
 
-resource "aws_iam_role_policy_attachment" "vault_irsa_kms" {
-  role       = aws_iam_role.vault_irsa.name
-  policy_arn = aws_iam_role_policy.vault_kms.id
-}
+# vault_irsa_kms attachment removed — vault_kms policy now attached directly
+# to vault_irsa role (H-05 fix: removed ec2 principal, using OIDC only)
 
 resource "aws_iam_role" "eso" {
   name = "${var.cluster_name}-eso"
@@ -158,12 +148,9 @@ resource "aws_iam_role_policy" "eso_secrets" {
           "secretsmanager:ListSecretVersionIds",
         ]
         Resource = "arn:aws:secretsmanager:*:*:secret:platform/*"
-      },
-      {
-        Effect   = "Allow"
-        Action   = "secretsmanager:ListSecrets"
-        Resource = "*"
       }
+      # H-06: ListSecrets on Resource:* removed — ESO uses explicit platform/* paths
+      # and does not require account-wide list permissions
     ]
   })
 }
@@ -212,7 +199,8 @@ resource "helm_release" "vault" {
 }
 
 output "vault_role_arn" {
-  value = aws_iam_role.vault.arn
+  # H-05: updated to vault_irsa — ec2-based vault role removed
+  value = aws_iam_role.vault_irsa.arn
 }
 
 output "vault_storage_bucket" {

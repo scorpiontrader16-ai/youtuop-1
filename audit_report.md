@@ -1,17 +1,33 @@
 # Institutional Efficiency Audit Report
 
-> Generated: 2026-04-01 23:47:51
-> Repo: /workspaces/youtuop-1
+> Generated: 2026-04-03 00:32:42
+> Repo: /workspaces/AmniX-Finance
 
 ---
 
 ## 1. Security
 
+### [MEDIUM] govulncheck not available in PATH
+
+**Where:** Go services
+
+**Fix:** Install: go install golang.org/x/vuln/cmd/govulncheck@latest  Then run: govulncheck ./... in each service.
+
+---
+
 ## 2. Code Quality
+
+### [HIGH] panic() calls in production Go code
+
+**Where:** 8 occurrences
+
+**Fix:** Replace panics with proper error returns. Reserve panic() only for truly unrecoverable startup failures.
+
+---
 
 ### [MEDIUM] Go functions with DB/client params possibly missing context.Context
 
-**Where:** ~243 candidates — verify manually
+**Where:** ~245 candidates — verify manually
 
 **Fix:** First param should be ctx context.Context for all I/O-bound functions to support cancellation and tracing.
 
@@ -45,20 +61,6 @@
 
 ## 4. CI/CD Pipeline
 
-### [MEDIUM] Workflows with no timeout-minutes (runaway jobs waste credits)
-
-**Where:** .github/workflows/buf-lock-generate.yml
-.github/workflows/generate-gosum.yml
-.github/workflows/gitops-validate.yml
-.github/workflows/image-sign.yml
-.github/workflows/promote-staging-to-prod.yml
-.github/workflows/proto-breaking-change.yml
-.github/workflows/release.yml
-
-**Fix:** Add 'timeout-minutes: 30' (or appropriate value) at job level to prevent hung jobs burning CI budget.
-
----
-
 ## 5. Observability
 
 ## 6. Dependency Hygiene
@@ -70,10 +72,10 @@
 | Severity | Count |
 |----------|-------|
 | CRITICAL | 0 |
-| HIGH     | 0 |
+| HIGH     | 1 |
 | MEDIUM   | 5 |
 | LOW      | 0 |
-| **Total**| **5** |
+| **Total**| **6** |
 
 ### Recommended fix order
 
