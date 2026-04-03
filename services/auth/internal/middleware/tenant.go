@@ -1,26 +1,58 @@
 package middleware
 
-import (
-    "net/http"
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  services/auth/internal/middleware/tenant.go                    ║
+// ║  Extracts tenant_id from verified JWT claims only.              ║
+// ║  Never trusts client-supplied headers — prevents tenant         ║
+// ║  hijacking across multi-tenant financial data platform.         ║
+// ╚══════════════════════════════════════════════════════════════════╝
 
-    "github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/postgres"
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	appjwt "github.com/scorpiontrader16-ai/youtuop-1/services/auth/internal/jwt"
 )
 
-// TenantContextMiddleware sets PostgreSQL session variable app.tenant_id
-// based on the X-Tenant-ID header.
-func TenantContextMiddleware(db *postgres.Client) func(http.Handler) http.Handler {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            tenantID := r.Header.Get("X-Tenant-ID")
-            if tenantID != "" {
-                // Execute set_config in PostgreSQL
-                _, err := db.DB().Exec(r.Context(), "SELECT set_config('app.tenant_id', $1, false)", tenantID)
-                if err != nil {
-                    // Log error but continue
-                    // slog is not available here; use a global logger if needed
-                }
-            }
-            next.ServeHTTP(w, r)
-        })
-    }
+// TenantContextMiddleware validates the Bearer token and injects the
+// verified tenant_id and user_id into the request context.
+//
+// Security: tenant_id is sourced exclusively from JWT claims (claim "tid").
+// Any X-Tenant-ID header supplied by the client is ignored entirely.
+// This prevents tenant hijacking in the multi-tenant platform.
+//
+// Usage:
+//
+//	mux.Handle("/v1/data", TenantContextMiddleware(jwtSvc)(myHandler))
+func TenantContextMiddleware(jwtSvc *appjwt.Service) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			if !strings.HasPrefix(authHeader, "Bearer ") {
+				http.Error(w, `{"error":"missing authorization"}`, http.StatusUnauthorized)
+				return
+			}
+
+			claims, err := jwtSvc.Validate(strings.TrimPrefix(authHeader, "Bearer "))
+			if err != nil {
+				http.Error(w, `{"error":"invalid token"}`, http.StatusUnauthorized)
+				return
+			}
+
+			if claims.TenantID == "" {
+				http.Error(w, `{"error":"missing tenant claim"}`, http.StatusUnauthorized)
+				return
+			}
+
+			// Inject verified identities into context — handlers must read
+			// from context only, never from request headers directly.
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, TenantIDKey, claims.TenantID)
+			ctx = context.WithValue(ctx, UserIDKey, claims.UserID())
+			ctx = context.WithValue(ctx, SessionIDKey, claims.SessionID)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
