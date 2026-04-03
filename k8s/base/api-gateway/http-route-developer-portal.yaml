@@ -46,7 +46,7 @@ spec:
       - name: youtuop-auth
         issuer: "https://auth.youtuop-1.com"
         remoteJWKS:
-          uri: "http://auth-stable.platform.svc.cluster.local:9092/.well-known/jwks.json"
+          uri: "https://auth-stable.platform.svc.cluster.local:9092/.well-known/jwks.json"
         claimToHeaders:
           - claim: sub
             header: x-user-id

@@ -14,7 +14,7 @@ spec:
         issuer: https://auth.platform.local
         audiences: ["api"]
         remoteJWKS:
-          url: http://auth.platform.svc.cluster.local:9092/.well-known/jwks.json
+          url: https://auth.platform.svc.cluster.local:9092/.well-known/jwks.json
         claims:
           - name: tid
             required: true
