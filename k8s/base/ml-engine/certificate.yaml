@@ -15,9 +15,9 @@ spec:
   renewBefore: 360h
   isCA: false
   privateKey:
-    algorithm: RSA
+    algorithm: ECDSA
     encoding: PKCS8
-    size: 2048
+    size: 256
     rotationPolicy: Always
   usages:
     - server auth
