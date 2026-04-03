@@ -15,6 +15,9 @@ on:
         options: [patch, minor, major]
         default: patch
 
+env:
+  REPO: ghcr.io/scorpiontrader16-ai/amnix-finance
+
 concurrency:
   group: release
   cancel-in-progress: false
@@ -197,9 +200,9 @@ jobs:
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ needs.version.outputs.new_version }}
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.REPO }}/${{ matrix.service }}:latest
+            ${{ env.REPO }}/${{ matrix.service }}:${{ needs.version.outputs.new_version }}
+            ${{ env.REPO }}/${{ matrix.service }}:${{ github.sha }}
           labels: |
             org.opencontainers.image.version=${{ needs.version.outputs.new_version }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -210,7 +213,7 @@ jobs:
       - name: Sign image — ${{ matrix.service }}
         run: |
           cosign sign --yes \
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}@${{ steps.build.outputs.digest }}
+            ${{ env.REPO }}/${{ matrix.service }}@${{ steps.build.outputs.digest }}
 
   # ─── GitHub Release ──────────────────────────────────────
   create-release:
@@ -251,14 +254,14 @@ jobs:
             ## Docker Images
 
             ```bash
-            docker pull ghcr.io/${{ github.repository }}/ingestion:${{ needs.version.outputs.new_version }}
-            docker pull ghcr.io/${{ github.repository }}/processing:${{ needs.version.outputs.new_version }}
+            docker pull ${{ env.REPO }}/ingestion:${{ needs.version.outputs.new_version }}
+            docker pull ${{ env.REPO }}/processing:${{ needs.version.outputs.new_version }}
             ```
 
             ## Verify Signatures
             ```bash
-            cosign verify ghcr.io/${{ github.repository }}/ingestion:${{ needs.version.outputs.new_version }}
-            cosign verify ghcr.io/${{ github.repository }}/processing:${{ needs.version.outputs.new_version }}
+            cosign verify ${{ env.REPO }}/ingestion:${{ needs.version.outputs.new_version }}
+            cosign verify ${{ env.REPO }}/processing:${{ needs.version.outputs.new_version }}
             ```
           draft: false
           prerelease: false
