@@ -27,3 +27,4 @@ resources:
   - http-route-feature-flags.yaml
   - http-route-ml-engine.yaml
   - security-policy-feature-flags.yaml
+  - security-headers-policy.yaml

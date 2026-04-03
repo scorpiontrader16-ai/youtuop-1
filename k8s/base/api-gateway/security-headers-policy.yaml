@@ -1,0 +1,39 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Security Response Headers — ClientTrafficPolicy                ║
+# ║  Applies to all listeners on platform-gateway                   ║
+# ║  Standards: OWASP Secure Headers | PCI-DSS v4.0 Req 6.2        ║
+# ╚══════════════════════════════════════════════════════════════════╝
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: security-headers
+  namespace: platform
+  labels:
+    app.kubernetes.io/component: api-gateway
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: platform-gateway
+    namespace: platform
+  headers:
+    addResponseHeaders:
+      - name: X-Content-Type-Options
+        value: nosniff
+      - name: X-Frame-Options
+        value: DENY
+      - name: Strict-Transport-Security
+        value: "max-age=31536000; includeSubDomains; preload"
+      - name: X-XSS-Protection
+        value: "0"
+      - name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - name: Cross-Origin-Resource-Policy
+        value: same-origin
+      - name: Permissions-Policy
+        value: "geolocation=(), microphone=(), camera=(), payment=()"
+      - name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    removeResponseHeaders:
+      - Server
+      - X-Powered-By
