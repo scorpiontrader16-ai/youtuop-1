@@ -183,7 +183,9 @@ spec:
               echo "=== Vault Bootstrap Complete ==="
           env:
             - name: VAULT_ADDR
-              value: "http://vault.vault.svc.cluster.local:8200"
+              value: "https://vault.vault.svc.cluster.local:8200"
+            - name: VAULT_CACERT
+              value: "/vault/tls/ca.crt"
             - name: VAULT_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -214,6 +216,15 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: vault-tls
+              mountPath: /vault/tls
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: vault-tls
+          secret:
+            secretName: vault-tls-secret
+            items:
+              - key: ca.crt
+                path: ca.crt
