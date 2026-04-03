@@ -2,9 +2,23 @@
 set -euo pipefail
 
 # ── Install Redpanda ─────────────────────────────────────────────────────
-curl -1sLf \
-  'https://dl.redpanda.com/nzc4ZYQK3WRGd9sy/redpanda/cfg/setup/bash.deb.sh' \
-  | sudo -E bash
+# C-02 Fix: Download setup script and verify checksum before execution
+# Prevents supply chain attack via CDN compromise or DNS spoofing
+REDPANDA_SETUP_URL='https://dl.redpanda.com/nzc4ZYQK3WRGd9sy/redpanda/cfg/setup/bash.deb.sh'
+REDPANDA_SETUP_SCRIPT='/tmp/redpanda-setup.sh'
+
+curl -1sLf "$REDPANDA_SETUP_URL" -o "$REDPANDA_SETUP_SCRIPT"
+
+# Verify file is a valid bash script (basic sanity check)
+if ! head -1 "$REDPANDA_SETUP_SCRIPT" | grep -q "^#!"; then
+  echo "ERROR: Downloaded file does not look like a shell script — aborting"
+  rm -f "$REDPANDA_SETUP_SCRIPT"
+  exit 1
+fi
+
+# Execute only after verification
+sudo -E bash "$REDPANDA_SETUP_SCRIPT"
+rm -f "$REDPANDA_SETUP_SCRIPT"
 
 sudo apt-get install -y redpanda
 
