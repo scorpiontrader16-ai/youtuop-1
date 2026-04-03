@@ -2707,3 +2707,81 @@ echo ""
 } >> "$REPORT"
 
 echo "✅ Done. Open $REPORT for the full actionable breakdown."
+
+section "31. Security — Vault HTTP Connections"
+VAULT_HTTP=$(grep -rn "http://vault.vault.svc.cluster.local\|http://vault\.svc" \
+  k8s/ infra/argocd/ --include="*.yaml" --include="*.yml" 2>/dev/null || true)
+if [ -n "$VAULT_HTTP" ]; then
+  fail "Vault connection uses HTTP (CRITICAL): $VAULT_HTTP"
+else
+  pass "All Vault connections use HTTPS"
+fi
+
+section "32. Security — JWKS HTTP Endpoints"
+JWKS_HTTP=$(grep -rn "remoteJWKS:\|uri:.*http://auth\|url:.*http://auth" \
+  k8s/base/api-gateway/ --include="*.yaml" --include="*.yml" 2>/dev/null || true)
+if echo "$JWKS_HTTP" | grep -q "http://"; then
+  fail "JWKS fetched over HTTP (HIGH): $JWKS_HTTP"
+else
+  pass "All JWKS endpoints use HTTPS"
+fi
+
+section "33. Security — PgBouncer Authentication Method"
+PGB_MD5=$(grep -rn "auth_type.*=.*md5" k8s/base/pgbouncer/ --include="*.ini" --include="*.yaml" 2>/dev/null || true)
+if [ -n "$PGB_MD5" ]; then
+  fail "PgBouncer uses MD5 auth (weak): $PGB_MD5"
+else
+  pass "PgBouncer does not use weak MD5 authentication"
+fi
+
+section "31. Security — Vault HTTP Connections"
+VAULT_HTTP=$(grep -rn "http://vault.vault.svc.cluster.local\|http://vault\.svc" \
+  k8s/ infra/argocd/ --include="*.yaml" --include="*.yml" 2>/dev/null || true)
+if [ -n "$VAULT_HTTP" ]; then
+  fail "Vault connection uses HTTP (CRITICAL): $VAULT_HTTP"
+else
+  pass "All Vault connections use HTTPS"
+fi
+
+section "32. Security — JWKS HTTP Endpoints"
+JWKS_HTTP=$(grep -rn "remoteJWKS:\|uri:.*http://auth\|url:.*http://auth" \
+  k8s/base/api-gateway/ --include="*.yaml" --include="*.yml" 2>/dev/null || true)
+if echo "$JWKS_HTTP" | grep -q "http://"; then
+  fail "JWKS fetched over HTTP (HIGH): $JWKS_HTTP"
+else
+  pass "All JWKS endpoints use HTTPS"
+fi
+
+section "33. Security — PgBouncer Authentication Method"
+PGB_MD5=$(grep -rn "auth_type.*=.*md5" k8s/base/pgbouncer/ --include="*.ini" --include="*.yaml" 2>/dev/null || true)
+if [ -n "$PGB_MD5" ]; then
+  fail "PgBouncer uses MD5 auth (weak): $PGB_MD5"
+else
+  pass "PgBouncer does not use weak MD5 authentication"
+fi
+
+section "31. Security — Vault HTTP Connections"
+VAULT_HTTP=$(grep -rn "http://vault.vault.svc.cluster.local\|http://vault\.svc" \
+  k8s/ infra/argocd/ --include="*.yaml" --include="*.yml" 2>/dev/null || true)
+if [ -n "$VAULT_HTTP" ]; then
+  fail "Vault connection uses HTTP (CRITICAL): $VAULT_HTTP"
+else
+  pass "All Vault connections use HTTPS"
+fi
+
+section "32. Security — JWKS HTTP Endpoints"
+JWKS_HTTP=$(grep -rn "remoteJWKS:\|uri:.*http://auth\|url:.*http://auth" \
+  k8s/base/api-gateway/ --include="*.yaml" --include="*.yml" 2>/dev/null || true)
+if echo "$JWKS_HTTP" | grep -q "http://"; then
+  fail "JWKS fetched over HTTP (HIGH): $JWKS_HTTP"
+else
+  pass "All JWKS endpoints use HTTPS"
+fi
+
+section "33. Security — PgBouncer Authentication Method"
+PGB_MD5=$(grep -rn "auth_type.*=.*md5" k8s/base/pgbouncer/ --include="*.ini" --include="*.yaml" 2>/dev/null || true)
+if [ -n "$PGB_MD5" ]; then
+  fail "PgBouncer uses MD5 auth (weak): $PGB_MD5"
+else
+  pass "PgBouncer does not use weak MD5 authentication"
+fi
