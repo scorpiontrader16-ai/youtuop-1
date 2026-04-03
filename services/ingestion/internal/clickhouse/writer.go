@@ -33,7 +33,7 @@ func ConfigFromEnv() Config {
 		Port:     getEnvInt("CLICKHOUSE_PORT", 9000),
 		Database: getEnv("CLICKHOUSE_DB", "events"),
 		Username: getEnv("CLICKHOUSE_USER", "platform"),
-		Password: getEnv("CLICKHOUSE_PASSWORD", "platform"),
+		Password: getEnv("CLICKHOUSE_PASSWORD", ""),
 		TLS:      getEnv("CLICKHOUSE_TLS", "false") == "true",
 	}
 }

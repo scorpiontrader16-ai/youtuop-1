@@ -30,8 +30,8 @@ type Config struct {
 func ConfigFromEnv() Config {
 	return Config{
 		Endpoint:        getEnv("MINIO_ENDPOINT", "localhost:9000"),
-		AccessKeyID:     getEnv("MINIO_ACCESS_KEY", "minioadmin"),
-		SecretAccessKey: getEnv("MINIO_SECRET_KEY", "minioadmin123"),
+		AccessKeyID:     getEnv("MINIO_ACCESS_KEY", ""),
+		SecretAccessKey: getEnv("MINIO_SECRET_KEY", ""),
 		Bucket:          getEnv("MINIO_BUCKET_PARQUET", "parquet-archive"),
 		UseSSL:          getEnv("MINIO_USE_SSL", "false") == "true",
 		Prefix:          getEnv("MINIO_PREFIX", "events"),

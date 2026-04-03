@@ -6,7 +6,7 @@
 # ─── Variables ───────────────────────────────────────────
 SCHEMA_REGISTRY_URL ?= http://localhost:18081
 PROTO_DIR           ?= ./proto
-POSTGRES_DSN        ?= postgres://platform:platform@localhost:5432/platform?sslmode=disable
+POSTGRES_DSN        ?= postgres://platform:CHANGE_ME@localhost:5432/platform?sslmode=disable
 
 # ─── Help ─────────────────────────────────────────────────
 .PHONY: help

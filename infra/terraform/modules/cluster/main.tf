@@ -187,10 +187,8 @@ resource "aws_iam_role" "github_actions" {
       Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
-        StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:scorpiontrader16-ai/youtuop-1:*"
-        }
         StringEquals = {
+          "token.actions.githubusercontent.com:sub" = "repo:scorpiontrader16-ai/AmniX-Finance:ref:refs/heads/main"
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
       }
