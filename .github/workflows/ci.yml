@@ -110,6 +110,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on ingestion
         run: |
           trivy fs \
@@ -117,6 +120,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/ingestion
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/ingestion \
+            --fail-on critical \
+            --only-fixed
 
   trivy-processing:
     name: Trivy — Processing Service
@@ -129,6 +138,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on processing
         run: |
           trivy fs \
@@ -136,6 +148,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/processing
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/processing \
+            --fail-on critical \
+            --only-fixed
 
   trivy-auth:
     name: Trivy — Auth Service
@@ -148,6 +166,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on auth
         run: |
           trivy fs \
@@ -155,6 +176,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/auth
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/auth \
+            --fail-on critical \
+            --only-fixed
 
   trivy-billing:
     name: Trivy — Billing Service
@@ -167,6 +194,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on billing
         run: |
           trivy fs \
@@ -174,6 +204,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/billing
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/billing \
+            --fail-on critical \
+            --only-fixed
 
   trivy-notifications:
     name: Trivy — Notifications Service
@@ -186,6 +222,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on notifications
         run: |
           trivy fs \
@@ -193,6 +232,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/notifications
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/notifications \
+            --fail-on critical \
+            --only-fixed
 
   trivy-control-plane:
     name: Trivy — Control Plane Service
@@ -205,6 +250,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on control-plane
         run: |
           trivy fs \
@@ -212,6 +260,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/control-plane
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/control-plane \
+            --fail-on critical \
+            --only-fixed
 
   trivy-feature-flags:
     name: Trivy — Feature Flags Service
@@ -224,6 +278,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on feature-flags
         run: |
           trivy fs \
@@ -231,6 +288,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/feature-flags
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/feature-flags \
+            --fail-on critical \
+            --only-fixed
 
   trivy-developer-portal:
     name: Trivy — Developer Portal Service
@@ -243,6 +306,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on developer-portal
         run: |
           trivy fs \
@@ -250,6 +316,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/developer-portal
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/developer-portal \
+            --fail-on critical \
+            --only-fixed
 
   trivy-realtime:
     name: Trivy — Realtime Service
@@ -262,6 +334,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on realtime
         run: |
           trivy fs \
@@ -269,6 +344,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/realtime
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/realtime \
+            --fail-on critical \
+            --only-fixed
 
   trivy-search:
     name: Trivy — Search Service
@@ -281,6 +362,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on search
         run: |
           trivy fs \
@@ -288,6 +372,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/search
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/search \
+            --fail-on critical \
+            --only-fixed
 
   trivy-analytics:
     name: Trivy — Analytics Service
@@ -300,6 +390,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on analytics
         run: |
           trivy fs \
@@ -307,6 +400,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/analytics
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/analytics \
+            --fail-on critical \
+            --only-fixed
 
   trivy-jobs:
     name: Trivy — Jobs Service
@@ -319,6 +418,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on jobs
         run: |
           trivy fs \
@@ -326,6 +428,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/jobs
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/jobs \
+            --fail-on critical \
+            --only-fixed
 
   trivy-tenant-operator:
     name: Trivy — Tenant Operator
@@ -338,6 +446,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on tenant-operator
         run: |
           trivy fs \
@@ -345,6 +456,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/tenant-operator
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/tenant-operator \
+            --fail-on critical \
+            --only-fixed
 
   codeql:
     name: CodeQL — Go Analysis
@@ -860,6 +977,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on hydration
         run: |
           trivy fs \
@@ -867,6 +987,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/hydration
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/hydration \
+            --fail-on critical \
+            --only-fixed
 
   trivy-ml-engine:
     name: Trivy — ML Engine Service
@@ -879,6 +1005,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on ml-engine
         run: |
           trivy fs \
@@ -886,6 +1015,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/ml-engine
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/ml-engine \
+            --fail-on critical \
+            --only-fixed
 
 
   trivy-data-quality:
@@ -899,6 +1034,9 @@ jobs:
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin
+      - name: Install Grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
       - name: Run Trivy on data-quality
         run: |
           trivy fs \
@@ -906,6 +1044,12 @@ jobs:
             --exit-code 1 \
             --ignore-unfixed \
             services/data-quality
+
+      - name: Run Grype as second opinion
+        run: |
+          grype dir:services/data-quality \
+            --fail-on critical \
+            --only-fixed
 
   build-hydration:
     name: Go — Hydration Service

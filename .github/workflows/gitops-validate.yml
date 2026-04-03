@@ -72,12 +72,20 @@ jobs:
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz \
             | tar xz -C /usr/local/bin
 
+      - name: Install kube-linter
+        run: |
+          curl -sSL https://github.com/stackrox/kube-linter/releases/download/v0.6.7/kube-linter-linux.tar.gz \
+            | tar xz -C /usr/local/bin
+
       - name: Validate k8s/base
         run: |
           kustomize build k8s/base | kubeconform \
             --ignore-missing-schemas \
             --kubernetes-version 1.29.0 \
             --summary
+
+          echo "Running kube-linter..."
+          kustomize build k8s/base | kube-linter lint -
 
       - name: Validate production overlays
         run: |
@@ -88,6 +96,9 @@ jobs:
                 --ignore-missing-schemas \
                 --kubernetes-version 1.29.0 \
                 --summary
+
+              echo "Running kube-linter on $overlay..."
+              kustomize build "$overlay" | kube-linter lint -
             fi
           done
 
