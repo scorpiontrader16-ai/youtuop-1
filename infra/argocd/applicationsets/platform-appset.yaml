@@ -57,10 +57,6 @@ spec:
           - service: realtime
             wave: "3"
           # ── Data Pipeline ───────────────────────────────────────────────
-          - service: ingestion
-            wave: "1"
-          - service: processing
-            wave: "1"
           - service: data-quality
             wave: "2"
           # ── AI / ML ─────────────────────────────────────────────────────
