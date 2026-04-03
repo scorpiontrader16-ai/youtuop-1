@@ -1,6 +1,23 @@
 # ============================================================
 # .github/workflows/release.yml — Fixed
 # ============================================================
+#
+# TODO [M-05]: Migrate PAT_TOKEN to GitHub App token
+#   PAT_TOKEN is a Personal Access Token tied to a human account.
+#   Risk: if the account is compromised or the person leaves,
+#   the entire release pipeline breaks.
+#   
+#   Action items:
+#   1. Create GitHub App with permissions: contents:write only
+#   2. Install App on this repository
+#   3. Replace secrets.PAT_TOKEN with App token generation:
+#      - uses: actions/create-github-app-token@v1
+#        id: app-token
+#        with:
+#          app-id: ${{ secrets.APP_ID }}
+#          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+#   4. Use steps.app-token.outputs.token instead of PAT_TOKEN
+# ============================================================
 name: Release
 
 on:
