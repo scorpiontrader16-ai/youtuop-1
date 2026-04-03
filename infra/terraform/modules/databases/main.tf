@@ -5,6 +5,11 @@ variable "cluster_name" {
 variable "vpc_id" {
   type = string
 }
+variable "eks_node_cidr" {
+  type        = string
+  description = "CIDR of the EKS node subnet — only this subnet can reach PostgreSQL on port 5432."
+  # Set this to your EKS node subnet CIDR, e.g. "10.0.2.0/24"
+}
 
 variable "subnet_ids" {
   type = list(string)
@@ -40,7 +45,7 @@ resource "aws_security_group" "postgres" {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"]
+    cidr_blocks = [var.eks_node_cidr] # Restricted to EKS node subnet only — not entire VPC
   }
 
   egress {

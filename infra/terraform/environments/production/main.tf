@@ -34,21 +34,25 @@ module "vpc" {
 
 # ── EKS Cluster ──────────────────────────────────────────────────────────
 module "cluster" {
-  source       = "../../modules/cluster"
-  cluster_name = var.cluster_name
-  environment  = "production"
-  vpc_id       = module.vpc.vpc_id
-  subnet_ids   = module.vpc.private_subnet_ids
+  source                  = "../../modules/cluster"
+  cluster_name            = var.cluster_name
+  environment             = "production"
+  vpc_id                  = module.vpc.vpc_id
+  subnet_ids              = module.vpc.private_subnet_ids
+  # H-03: restricted to production VPC only — update to VPN CIDR when bastion is ready
+  eks_public_access_cidrs = ["10.0.0.0/16"]
 }
 
 # ── Databases ─────────────────────────────────────────────────────────────
 module "databases" {
-  source       = "../../modules/databases"
-  cluster_name = var.cluster_name
-  environment  = "production"
-  vpc_id       = module.vpc.vpc_id
-  subnet_ids   = module.vpc.private_subnet_ids
-  multi_az     = true
+  source         = "../../modules/databases"
+  cluster_name   = var.cluster_name
+  environment    = "production"
+  vpc_id         = module.vpc.vpc_id
+  subnet_ids     = module.vpc.private_subnet_ids
+  multi_az       = true
+  # H-04: restricted to production private subnets only
+  eks_node_cidr  = "10.0.0.0/16"
 }
 
 # ── Redpanda ──────────────────────────────────────────────────────────────

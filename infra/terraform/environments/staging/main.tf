@@ -31,20 +31,24 @@ module "vpc" {
 }
 
 module "cluster" {
-  source       = "../../modules/cluster"
-  cluster_name = var.cluster_name
-  environment  = "staging"
-  vpc_id       = module.vpc.vpc_id
-  subnet_ids   = module.vpc.private_subnet_ids
+  source                  = "../../modules/cluster"
+  cluster_name            = var.cluster_name
+  environment             = "staging"
+  vpc_id                  = module.vpc.vpc_id
+  subnet_ids              = module.vpc.private_subnet_ids
+  # H-03: restricted to staging VPC only — update to VPN CIDR when bastion is ready
+  eks_public_access_cidrs = ["10.1.0.0/16"]
 }
 
 module "databases" {
-  source       = "../../modules/databases"
-  cluster_name = var.cluster_name
-  environment  = "staging"
-  vpc_id       = module.vpc.vpc_id
-  subnet_ids   = module.vpc.private_subnet_ids
-  multi_az     = false
+  source         = "../../modules/databases"
+  cluster_name   = var.cluster_name
+  environment    = "staging"
+  vpc_id         = module.vpc.vpc_id
+  subnet_ids     = module.vpc.private_subnet_ids
+  multi_az       = false
+  # H-04: restricted to staging private subnets only
+  eks_node_cidr  = "10.1.0.0/16"
 }
 
 module "redpanda" {
