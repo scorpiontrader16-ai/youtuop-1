@@ -80,7 +80,7 @@ create_ca() {
     fi
 
     # إنشاء الـ CA private key
-    openssl genrsa -out "$CERT_DIR/ca/ca.key" 4096
+    openssl ecparam -name prime256v1 -genkey -noout -out "$CERT_DIR/ca/ca.key"
 
     # إنشاء الـ CA certificate
     openssl req -new -x509 \
@@ -104,7 +104,7 @@ create_service_cert() {
     mkdir -p "$cert_dir"
 
     # Private key
-    openssl genrsa -out "$cert_dir/tls.key" 2048
+    openssl ecparam -name prime256v1 -genkey -noout -out "$cert_dir/tls.key"
 
     # CSR config — يشمل كل الـ DNS names المحتملة
     cat > "$cert_dir/csr.conf" << EOF
