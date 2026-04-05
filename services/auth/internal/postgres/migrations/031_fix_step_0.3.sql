@@ -1,5 +1,5 @@
 -- ============================================================
--- services/auth/internal/postgres/migrations/030_add_missing_columns_and_rls.sql
+-- services/auth/internal/postgres/migrations/031_fix_step_0.3.sql
 -- Scope: auth service database only — independent migration sequence
 --
 -- STATUS: SUPERSEDED — intentional no-op
@@ -8,11 +8,9 @@
 -- were fully and correctly implemented in 025_add_missing_columns.sql,
 -- which runs before this file in the migration sequence.
 --
--- Applying this migration's original SQL after 025 causes:
---   ERROR: policy "tenant_isolation_ml_models" already exists
---   ERROR: policy "tenant_isolation_feature_values" already exists
---   ERROR: policy "tenant_isolation_prediction_log" already exists
---   ERROR: policy "tenant_isolation_model_deployments" already exists
+-- Additionally, 031's RLS USING clause omitted the 'system' tenant
+-- passthrough present in 025, which would have broken access to
+-- platform-owned ML models from tenant sessions.
 --
 -- Superseded by: 025_add_missing_columns.sql
 -- ============================================================
