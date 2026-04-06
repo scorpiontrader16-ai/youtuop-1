@@ -77,3 +77,7 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+require github.com/scorpiontrader16-ai/youtuop-1/internal/platform v0.0.0
+
+replace github.com/scorpiontrader16-ai/youtuop-1/internal/platform => ../../internal/platform

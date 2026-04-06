@@ -58,3 +58,7 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 // باقي الـ indirect يتم إضافتها تلقائياً عند تشغيل go mod tidy
 )
+
+require github.com/scorpiontrader16-ai/youtuop-1/internal/platform v0.0.0
+
+replace github.com/scorpiontrader16-ai/youtuop-1/internal/platform => ../../internal/platform

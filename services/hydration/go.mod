@@ -24,3 +24,7 @@ require (
 replace github.com/scorpiontrader16-ai/youtuop-1 => ../..
 
 toolchain go1.24.13
+
+require github.com/scorpiontrader16-ai/youtuop-1/internal/platform v0.0.0
+
+replace github.com/scorpiontrader16-ai/youtuop-1/internal/platform => ../../internal/platform

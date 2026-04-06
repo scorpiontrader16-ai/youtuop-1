@@ -51,3 +51,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+require github.com/scorpiontrader16-ai/youtuop-1/internal/platform v0.0.0
+
+replace github.com/scorpiontrader16-ai/youtuop-1/internal/platform => ../../internal/platform
