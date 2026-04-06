@@ -2,17 +2,23 @@ package contextkeys
 
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  services/control-plane/internal/contextkeys/context_keys.go   ║
-// ║  Typed context keys (prevents key collisions)                   ║
+// ║  F-AUTH62 — Delegates to shared platform contextkeys package    ║
+// ║                                                                  ║
+// ║  لماذا delegation بدلاً من تعريف محلي:                         ║
+// ║  - يضمن أن كل service تستخدم نفس key type بالضبط               ║
+// ║  - type collision مستحيل — struct type فريد في Go type system   ║
+// ║  - الأسماء المحلية محفوظة — لا تغيير على الـ handlers           ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
-// contextKey is an unexported type for context keys in this package.
-// Using a typed key prevents collisions with other packages.
-type contextKey string
+import (
+	"github.com/scorpiontrader16-ai/youtuop-1/internal/platform/contextkeys"
+)
 
-const (
-	// UserIDKey is the context key for the authenticated user ID.
-	UserIDKey contextKey = "user_id"
+// الأسماء المحلية تفوِّض للـ shared package — handlers لا تحتاج تغيير
+var (
+	// UserIDKey هو مفتاح الـ context للمستخدم المُحقَّق منه.
+	UserIDKey = contextkeys.UserIDKey
 
-	// TenantIDKey is the context key for the authenticated tenant ID.
-	TenantIDKey contextKey = "tenant_id"
+	// TenantIDKey هو مفتاح الـ context للـ tenant المُحقَّق منه.
+	TenantIDKey = contextkeys.TenantIDKey
 )

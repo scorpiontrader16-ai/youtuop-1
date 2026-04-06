@@ -1,34 +1,38 @@
-package middleware
+package contextkeys
 
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  services/auth/internal/middleware/context_keys.go              ║
-// ║  F-AUTH62 — Delegates to shared platform contextkeys package    ║
+// ║  internal/platform/contextkeys/context_keys.go                  ║
+// ║  F-AUTH62 — Typed struct context keys (shared platform package) ║
 // ║                                                                  ║
-// ║  لماذا delegation بدلاً من تعريف محلي:                         ║
-// ║  - يضمن أن كل service تستخدم نفس key type بالضبط               ║
-// ║  - type collision مستحيل — struct type فريد في Go type system   ║
-// ║  - الأسماء المحلية محفوظة — لا تغيير على الـ handlers           ║
+// ║  لماذا struct{} بدلاً من string:                                ║
+// ║  - string keys تتصادم عند تساوي القيمة بين packages مختلفة     ║
+// ║  - كل struct type فريد في Go's type system حتى لو فارغ          ║
+// ║  - zero-size → zero allocation على الـ heap                     ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
-import (
-	"github.com/scorpiontrader16-ai/youtuop-1/internal/platform/contextkeys"
-)
+// كل key له نوع struct منفصل — يمنع التصادم حتى بين packages
+// تطابق النمط المستخدم في geo.go و ingestion/main.go في نفس المشروع
 
-// الأسماء المحلية تفوِّض للـ shared package — handlers لا تحتاج تغيير
+type userIDKey            struct{}
+type tenantIDKey          struct{}
+type sessionIDKey         struct{}
+type deviceFingerprintKey struct{}
+
+// المتغيرات المصدَّرة — القيمة الوحيدة المقبولة لكل key
 var (
 	// UserIDKey هو مفتاح الـ context للمستخدم المُحقَّق منه.
 	// يُضبط بواسطة TenantContextMiddleware بعد التحقق من الـ JWT.
-	UserIDKey = contextkeys.UserIDKey
+	UserIDKey userIDKey
 
 	// TenantIDKey هو مفتاح الـ context للـ tenant المُحقَّق منه.
 	// يُضبط بواسطة TenantContextMiddleware بعد التحقق من الـ JWT.
-	TenantIDKey = contextkeys.TenantIDKey
+	TenantIDKey tenantIDKey
 
 	// SessionIDKey هو مفتاح الـ context للـ session الحالية.
 	// يُضبط بواسطة TenantContextMiddleware بعد التحقق من الـ JWT.
-	SessionIDKey = contextkeys.SessionIDKey
+	SessionIDKey sessionIDKey
 
 	// DeviceFingerprintKey هو مفتاح الـ context لبصمة الجهاز.
 	// يُضبط بواسطة DeviceFingerprintMiddleware.
-	DeviceFingerprintKey = contextkeys.DeviceFingerprintKey
+	DeviceFingerprintKey deviceFingerprintKey
 )
