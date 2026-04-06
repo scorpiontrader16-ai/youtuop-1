@@ -16,8 +16,8 @@ ALTER TABLE tenants
     ADD COLUMN IF NOT EXISTS updated_by TEXT;
 
 -- قيود التحقق
-ALTER TABLE tenants ADD CONSTRAINT chk_tenant_status CHECK (status IN ('active', 'suspended', 'deleted'));
-ALTER TABLE tenants ADD CONSTRAINT chk_tenant_domain UNIQUE (custom_domain) WHERE custom_domain IS NOT NULL;
+-- UNIQUE constraint with WHERE must be an index, not ALTER TABLE constraint
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_custom_domain ON tenants(custom_domain) WHERE custom_domain IS NOT NULL;
 
 -- فهرس للبحث السريع حسب الحالة والمجال المخصص
 CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
@@ -36,10 +36,12 @@ CREATE TABLE IF NOT EXISTS tenant_audit_log (
 CREATE INDEX IF NOT EXISTS idx_tenant_audit_tenant ON tenant_audit_log(tenant_id, performed_at);
 
 -- +goose StatementEnd
-
 -- +goose Down
 -- +goose StatementBegin
 DROP TABLE IF EXISTS tenant_audit_log CASCADE;
+DROP INDEX IF EXISTS uq_tenants_custom_domain;
+DROP INDEX IF EXISTS idx_tenants_custom_domain;
+DROP INDEX IF EXISTS idx_tenants_status;
 ALTER TABLE tenants DROP COLUMN IF EXISTS custom_domain;
 ALTER TABLE tenants DROP COLUMN IF EXISTS branding;
 ALTER TABLE tenants DROP COLUMN IF EXISTS limits;

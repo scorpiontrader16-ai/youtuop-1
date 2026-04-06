@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS sms_mfa_attempts (
 );
 
 -- توسيع جدول sessions (إضافة device_fingerprint)
-ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS device_fingerprint TEXT;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS device_fingerprint TEXT;
 
 -- جدول محاولات تسجيل الدخول الفاشلة (brute force)
 CREATE TABLE IF NOT EXISTS failed_login_attempts (
@@ -93,5 +93,5 @@ DROP TABLE IF EXISTS password_history CASCADE;
 DROP TABLE IF EXISTS failed_login_attempts CASCADE;
 DROP TABLE IF EXISTS sms_mfa_attempts CASCADE;
 DROP TABLE IF EXISTS mfa_secrets CASCADE;
-ALTER TABLE active_sessions DROP COLUMN IF EXISTS device_fingerprint;
+ALTER TABLE sessions DROP COLUMN IF EXISTS device_fingerprint;
 -- +goose StatementEnd

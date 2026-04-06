@@ -5,11 +5,11 @@
 -- +goose Up
 -- +goose StatementBegin
 
--- إضافة عمود refresh_token_hash إلى جدول active_sessions
-ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS refresh_token_hash TEXT;
+-- إضافة عمود refresh_token_hash إلى جدول sessions
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS refresh_token_hash TEXT;
 
--- إضافة عمود refresh_expires_at إلى جدول active_sessions
-ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS refresh_expires_at TIMESTAMPTZ;
+-- إضافة عمود refresh_expires_at إلى جدول sessions
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS refresh_expires_at TIMESTAMPTZ;
 
 -- إضافة عمود password_hash إلى جدول users (لتسجيل الدخول بالبريد الإلكتروني)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
 );
 
 -- إضافة فهارس ضرورية
-CREATE INDEX IF NOT EXISTS idx_active_sessions_refresh_token ON active_sessions(refresh_token_hash) WHERE refresh_token_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sessions_refresh_token ON sessions(refresh_token_hash) WHERE refresh_token_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
 
@@ -39,8 +39,11 @@ CREATE INDEX IF NOT EXISTS idx_tenants_slug ON tenants(slug);
 
 -- +goose Down
 -- +goose StatementBegin
-ALTER TABLE active_sessions DROP COLUMN IF EXISTS refresh_token_hash;
-ALTER TABLE active_sessions DROP COLUMN IF EXISTS refresh_expires_at;
+DROP INDEX IF EXISTS idx_sessions_refresh_token;
+DROP INDEX IF EXISTS idx_users_email;
+DROP INDEX IF EXISTS idx_tenants_slug;
+ALTER TABLE sessions DROP COLUMN IF EXISTS refresh_token_hash;
+ALTER TABLE sessions DROP COLUMN IF EXISTS refresh_expires_at;
 ALTER TABLE users DROP COLUMN IF EXISTS password_hash;
 ALTER TABLE tenants DROP COLUMN IF EXISTS slug;
 ALTER TABLE tenants DROP COLUMN IF EXISTS plan;
