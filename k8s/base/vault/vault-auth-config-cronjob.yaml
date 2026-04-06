@@ -1,7 +1,17 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  vault-auth-config-cronjob.yaml — F-VAULT10 Fallback                ║
-# ║  CronJob fallback إذا فشل ArgoCD PostSync hook                      ║
+# ║  FIX: إزالة kubectl (غير موجود في vault image)                      ║
+# ║  الـ CronJob يتحقق ويُعيد تهيئة Vault مباشرة بدون kubernetes API   ║
 # ╚══════════════════════════════════════════════════════════════════════╝
+#
+# المنطق:
+#   كل 30 دقيقة يتحقق من:
+#     1. kubernetes auth method موجود
+#     2. database secrets engine موجود
+#     3. platform-secrets policy موجودة
+#     4. platform-services kubernetes role موجود
+#   إذا غاب أي منها → يُعيد إنشاءه مباشرة (idempotent)
+#   لا يحتاج kubectl — يستخدم vault CLI مباشرة
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -13,7 +23,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/part-of: youtuop-platform
 spec:
-  schedule: "*/30 * * * *"  # كل 30 دقيقة
+  schedule: "*/30 * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3
@@ -43,24 +53,105 @@ spec:
               args:
                 - |
                   set -euo pipefail
-                  
-                  # تحقق من أن Vault جاهز
+
+                  echo "=== Vault Fallback Health Check ==="
+
+                  # ── تحقق من أن Vault جاهز ────────────────────────────────
                   if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-                    echo "Vault not ready — skipping"
+                    echo "Vault sealed or unreachable — skipping"
                     exit 0
                   fi
-                  
-                  # تحقق من أن kubernetes auth موجود
-                  if vault auth list | grep -q "kubernetes/"; then
-                    echo "Kubernetes auth already configured — OK"
-                    exit 0
+                  echo "--- Vault is ready"
+
+                  NEEDS_REPAIR=0
+
+                  # ── تحقق 1: kubernetes auth method ───────────────────────
+                  if ! vault auth list 2>/dev/null | grep -q "kubernetes/"; then
+                    echo "MISSING: kubernetes auth method — repairing..."
+                    vault auth enable kubernetes || true
+                    vault write auth/kubernetes/config \
+                      kubernetes_host="https://kubernetes.default.svc:443"
+                    NEEDS_REPAIR=1
+                  else
+                    echo "OK: kubernetes auth method"
                   fi
-                  
-                  echo "Kubernetes auth missing — triggering bootstrap Job"
-                  # إنشاء Job جديد بـ timestamp
-                  kubectl create job "vault-auth-config-$(date +%s)" \
-                    --from=job/vault-auth-config \
-                    --namespace=vault || echo "Job creation failed"
+
+                  # ── تحقق 2: database secrets engine ──────────────────────
+                  if ! vault secrets list 2>/dev/null | grep -q "database/"; then
+                    echo "MISSING: database secrets engine — repairing..."
+                    vault secrets enable database || true
+                    vault write database/config/platform \
+                      plugin_name=postgresql-database-plugin \
+                      allowed_roles="auth-role,billing-role,analytics-role,control-plane-role,developer-portal-role,feature-flags-role,hydration-role,ingestion-role,jobs-role,ml-engine-role,notifications-role,processing-role,realtime-role,search-role,tenant-operator-role,data-quality-role,tenant-*" \
+                      connection_url="postgresql://{{username}}:{{password}}@postgres.platform.svc.cluster.local:5432/platform?sslmode=require" \
+                      username="${VAULT_DB_ADMIN_USER}" \
+                      password="${VAULT_DB_ADMIN_PASSWORD}"
+                    NEEDS_REPAIR=1
+                  else
+                    echo "OK: database secrets engine"
+                  fi
+
+                  # ── تحقق 3: platform-secrets policy ──────────────────────
+                  if ! vault policy list 2>/dev/null | grep -q "platform-secrets"; then
+                    echo "MISSING: platform-secrets policy — repairing..."
+                    vault policy write platform-secrets - <<'POLICY'
+                  path "database/creds/auth-role"             { capabilities = ["read"] }
+                  path "database/creds/billing-role"          { capabilities = ["read"] }
+                  path "database/creds/analytics-role"        { capabilities = ["read"] }
+                  path "database/creds/control-plane-role"    { capabilities = ["read"] }
+                  path "database/creds/developer-portal-role" { capabilities = ["read"] }
+                  path "database/creds/feature-flags-role"    { capabilities = ["read"] }
+                  path "database/creds/hydration-role"        { capabilities = ["read"] }
+                  path "database/creds/ingestion-role"        { capabilities = ["read"] }
+                  path "database/creds/jobs-role"             { capabilities = ["read"] }
+                  path "database/creds/ml-engine-role"        { capabilities = ["read"] }
+                  path "database/creds/notifications-role"    { capabilities = ["read"] }
+                  path "database/creds/processing-role"       { capabilities = ["read"] }
+                  path "database/creds/realtime-role"         { capabilities = ["read"] }
+                  path "database/creds/search-role"           { capabilities = ["read"] }
+                  path "database/creds/tenant-operator-role"  { capabilities = ["read"] }
+                  path "database/creds/data-quality-role"     { capabilities = ["read"] }
+                  path "database/creds/+/renew"               { capabilities = ["update"] }
+                  path "sys/leases/renew"                     { capabilities = ["update"] }
+                  POLICY
+                    NEEDS_REPAIR=1
+                  else
+                    echo "OK: platform-secrets policy"
+                  fi
+
+                  # ── تحقق 4: tenant-isolation policy ──────────────────────
+                  if ! vault policy list 2>/dev/null | grep -q "tenant-isolation"; then
+                    echo "MISSING: tenant-isolation policy — repairing..."
+                    vault policy write tenant-isolation - <<'POLICY'
+                  path "database/creds/tenant-*"   { capabilities = ["read"] }
+                  path "database/roles/tenant-*"   { capabilities = ["create", "update", "read"] }
+                  path "sys/leases/renew"          { capabilities = ["update"] }
+                  POLICY
+                    NEEDS_REPAIR=1
+                  else
+                    echo "OK: tenant-isolation policy"
+                  fi
+
+                  # ── تحقق 5: platform-services kubernetes role ─────────────
+                  if ! vault read auth/kubernetes/role/platform-services 2>/dev/null | grep -q "platform-services\|external-secrets"; then
+                    echo "MISSING: platform-services role — repairing..."
+                    vault write auth/kubernetes/role/platform-services \
+                      bound_service_account_names=external-secrets \
+                      bound_service_account_namespaces=external-secrets \
+                      policies="platform-secrets,tenant-isolation" \
+                      ttl=1h \
+                      token_max_ttl=4h \
+                      token_period=30m
+                    NEEDS_REPAIR=1
+                  else
+                    echo "OK: platform-services role"
+                  fi
+
+                  if [ "$NEEDS_REPAIR" = "1" ]; then
+                    echo "=== Vault Fallback: repairs completed successfully ==="
+                  else
+                    echo "=== Vault Fallback: all checks passed — no repairs needed ==="
+                  fi
               env:
                 - name: VAULT_ADDR
                   value: "https://vault.vault.svc.cluster.local:8200"
@@ -71,6 +162,18 @@ spec:
                     secretKeyRef:
                       name: vault-bootstrap-token
                       key: token
+                      optional: true
+                - name: VAULT_DB_ADMIN_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: vault-bootstrap-token
+                      key: db_admin_user
+                      optional: true
+                - name: VAULT_DB_ADMIN_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: vault-bootstrap-token
+                      key: db_admin_password
                       optional: true
               resources:
                 requests:
@@ -104,9 +207,10 @@ spec:
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  ROLLBACK INSTRUCTIONS                                               ║
 # ╚══════════════════════════════════════════════════════════════════════╝
-# To disable this CronJob:
-#   kubectl patch cronjob vault-auth-config-fallback -n vault -p '{"spec":{"suspend":true}}'
-# 
+# To suspend this CronJob:
+#   kubectl patch cronjob vault-auth-config-fallback -n vault \
+#     -p '{"spec":{"suspend":true}}'
+#
 # To delete this CronJob:
 #   kubectl delete cronjob vault-auth-config-fallback -n vault
 #

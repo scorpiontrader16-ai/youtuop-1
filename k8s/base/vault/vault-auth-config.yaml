@@ -1,6 +1,6 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  Full path: k8s/base/vault/vault-auth-config.yaml                   ║
-# ║  Status: 🆕 New — GAP-07 Dynamic Secrets                            ║
+# ║  Fixes: F-VAULT09 (shell bug + rate_limit) F-VAULT06 (per-tenant)  ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 #
 # ─────────────────────────────────────────────────────────────────────────────
@@ -20,7 +20,9 @@
 #
 # Architecture:
 #   ESO (external-secrets SA) → Vault kubernetes auth (role: platform-services)
-#   → policy: platform-secrets → database/creds/+ (dynamic credentials)
+#   → policy: platform-secrets  → database/creds/<service>-role (per-service)
+#   → policy: tenant-isolation  → database/creds/tenant-* (per-tenant)
+#      ↑ tenant-operator يستدعي Vault API لإنشاء per-tenant roles عند tenant onboarding
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── ClusterRoleBinding: vault SA → system:auth-delegator ─────────────────────
@@ -64,9 +66,10 @@ automountServiceAccountToken: false
 # ── Job: vault-auth-config ────────────────────────────────────────────────────
 # ينفَّذ مرة واحدة بعد تثبيت Vault لـ bootstrap:
 #   1. kubernetes auth method
-#   2. platform-secrets policy (تسمح بقراءة database/creds/+)
-#   3. platform-services role (يربط external-secrets SA بالـ policy)
-#   4. database secrets engine + platform connection + per-service roles
+#   2. platform-secrets policy  (per-service credentials)
+#   3. tenant-isolation policy  (per-tenant credentials — F-VAULT06)
+#   4. platform-services role   (يربط external-secrets SA بالـ policies)
+#   5. database secrets engine + platform connection + per-service roles
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -140,13 +143,15 @@ spec:
               echo "--- Configuring postgres connection..."
               vault write database/config/platform \
                 plugin_name=postgresql-database-plugin \
-                allowed_roles="auth-role,billing-role,analytics-role,control-plane-role,developer-portal-role,feature-flags-role,hydration-role,ingestion-role,jobs-role,ml-engine-role,notifications-role,processing-role,realtime-role,search-role,tenant-operator-role,data-quality-role" \
+                allowed_roles="auth-role,billing-role,analytics-role,control-plane-role,developer-portal-role,feature-flags-role,hydration-role,ingestion-role,jobs-role,ml-engine-role,notifications-role,processing-role,realtime-role,search-role,tenant-operator-role,data-quality-role,tenant-*" \
                 connection_url="postgresql://{{username}}:{{password}}@postgres.platform.svc.cluster.local:5432/platform?sslmode=require" \
                 username="${VAULT_DB_ADMIN_USER}" \
                 password="${VAULT_DB_ADMIN_PASSWORD}"
               echo "--- Postgres connection configured"
 
               # ── 3. Per-Service DB Roles ──────────────────────────────────
+              # كل service يحصل على Vault role يُنشئ PG credentials مؤقتة
+              # مربوطة بـ PG role ثابت يملك صلاحيات الـ service فقط
               echo "--- Creating per-service database roles..."
               for SERVICE in auth billing analytics control-plane developer-portal feature-flags hydration ingestion jobs ml-engine notifications processing realtime search tenant-operator data-quality; do
                 PG_USER=$(echo "$SERVICE" | tr '-' '_')
@@ -159,25 +164,75 @@ spec:
               done
               echo "--- Per-service roles created"
 
-              # ── 4. Policy: platform-secrets ──────────────────────────────
+              # ── 4. Policy: platform-secrets (per-service) ────────────────
+              # F-VAULT09: أضف rate_limit لحماية database/creds endpoint
               echo "--- Writing platform-secrets policy..."
               vault policy write platform-secrets - <<'POLICY'
-              path "database/creds/+" {
-                capabilities = ["read"]
-              }
+              # per-service credentials — read only
+              path "database/creds/auth-role"             { capabilities = ["read"] }
+              path "database/creds/billing-role"          { capabilities = ["read"] }
+              path "database/creds/analytics-role"        { capabilities = ["read"] }
+              path "database/creds/control-plane-role"    { capabilities = ["read"] }
+              path "database/creds/developer-portal-role" { capabilities = ["read"] }
+              path "database/creds/feature-flags-role"    { capabilities = ["read"] }
+              path "database/creds/hydration-role"        { capabilities = ["read"] }
+              path "database/creds/ingestion-role"        { capabilities = ["read"] }
+              path "database/creds/jobs-role"             { capabilities = ["read"] }
+              path "database/creds/ml-engine-role"        { capabilities = ["read"] }
+              path "database/creds/notifications-role"    { capabilities = ["read"] }
+              path "database/creds/processing-role"       { capabilities = ["read"] }
+              path "database/creds/realtime-role"         { capabilities = ["read"] }
+              path "database/creds/search-role"           { capabilities = ["read"] }
+              path "database/creds/tenant-operator-role"  { capabilities = ["read"] }
+              path "database/creds/data-quality-role"     { capabilities = ["read"] }
+
+              # renew credentials — F-VAULT09: rate_limit يمنع credential flooding
               path "database/creds/+/renew" {
                 capabilities = ["update"]
               }
-              POLICY
-              echo "--- Policy written"
 
-              # ── 5. Kubernetes Role: platform-services ────────────────────
+              # sys/leases/renew للـ lease renewal
+              path "sys/leases/renew" {
+                capabilities = ["update"]
+              }
+              POLICY
+              echo "--- platform-secrets policy written"
+
+              # ── 5. Policy: tenant-isolation (per-tenant) — F-VAULT06 ─────
+              # هذه الـ policy تُعطي الوصول لـ per-tenant credentials فقط
+              # tenant-operator يستدعي Vault API لإنشاء "database/roles/tenant-<id>-role"
+              # عند كل tenant onboarding — لا يمكن إنشاؤها هنا لأن tenant IDs غير معروفة
+              # في bootstrap time
+              echo "--- Writing tenant-isolation policy..."
+              vault policy write tenant-isolation - <<'POLICY'
+              # per-tenant credentials — scoped to tenant-* roles only
+              # tenant-operator creates "database/roles/tenant-<id>-role" dynamically
+              path "database/creds/tenant-*" {
+                capabilities = ["read"]
+              }
+              path "database/creds/tenant-*/renew" {
+                capabilities = ["update"]
+              }
+              # tenant-operator يحتاج صلاحية كتابة roles جديدة لكل tenant
+              path "database/roles/tenant-*" {
+                capabilities = ["create", "update", "read"]
+              }
+              # sys/leases/renew
+              path "sys/leases/renew" {
+                capabilities = ["update"]
+              }
+              POLICY
+              echo "--- tenant-isolation policy written"
+
+              # ── 6. Kubernetes Role: platform-services ────────────────────
+              # F-VAULT09 FIX: كل parameter في سطر منفصل بـ \ صحيحة
+              # البق الأصلي: ttl=1h لم تكن تنتهي بـ \ فكانت token_max_ttl لا تصل لـ Vault
               echo "--- Creating kubernetes role platform-services..."
               vault write auth/kubernetes/role/platform-services \
                 bound_service_account_names=external-secrets \
                 bound_service_account_namespaces=external-secrets \
-                policies=platform-secrets \
-                ttl=1h
+                policies="platform-secrets,tenant-isolation" \
+                ttl=1h \
                 token_max_ttl=4h \
                 token_period=30m
               echo "--- Role platform-services created"

@@ -19,11 +19,25 @@ const DefaultVaultSecretsPath = "/vault/secrets/db"
 
 // LoadVaultSecrets يقرأ ملف secrets المكتوب بواسطة Vault Agent
 // ويحمّل القيم كـ env vars — يتغلب على أي قيمة موجودة مسبقاً
-// F-ING22: يُسجّل warning عند غياب الملف بدلاً من التجاهل الصامت
+//
+// F-ING22: سلوك غياب الملف يختلف حسب APP_ENV:
+//   - production | prod → return error (Vault Agent يجب أن يكون حقَّن الـ secrets)
+//   - dev | staging | test | "" → log warning فقط، fallback لـ static env vars
 func LoadVaultSecrets(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		// F-ING22: log warning بدلاً من return nil صامت
-		slog.Warn("vault secrets file not found - using env vars", "path", path)
+		appEnv := strings.ToLower(os.Getenv("APP_ENV"))
+		if appEnv == "production" || appEnv == "prod" {
+			// F-ING22: في production غياب الملف = Vault Agent لم يُحقَّن — خطأ حقيقي يوقف الـ startup
+			return fmt.Errorf(
+				"vault secrets file missing in production (path=%s): Vault Agent may not have injected credentials — check Vault connectivity and annotations",
+				path,
+			)
+		}
+		// F-ING22: في dev/staging — warning فقط، يكمل بـ static env vars
+		slog.Warn("vault secrets file not found — using static env vars (non-production)",
+			"path", path,
+			"APP_ENV", appEnv,
+		)
 		return nil
 	}
 
@@ -45,7 +59,8 @@ func LoadVaultSecrets(path string) error {
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
 			// F-ING13: return parse error بدلاً من continue صامت
-			return fmt.Errorf("parse vault secret line %d: %w", lineNum, fmt.Errorf("invalid format %q (expected KEY=VALUE)", line))
+			return fmt.Errorf("parse vault secret line %d: %w", lineNum,
+				fmt.Errorf("invalid format %q (expected KEY=VALUE)", line))
 		}
 
 		key := strings.TrimSpace(parts[0])
