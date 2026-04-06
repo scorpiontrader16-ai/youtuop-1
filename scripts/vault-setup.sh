@@ -101,6 +101,7 @@ GRANT auth_role, billing_role, analytics_role, control_plane_role,
       developer_portal_role, feature_flags_role, hydration_role, ingestion_role,
       jobs_role, ml_engine_role, notifications_role, processing_role,
       realtime_role, search_role, tenant_operator_role
+      data_quality_role
 TO vault_admin WITH ADMIN OPTION;
 SELECT usename, usecreaterole FROM pg_user WHERE usename = 'vault_admin';
 SQL

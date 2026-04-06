@@ -10,6 +10,7 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 )
@@ -18,9 +19,11 @@ const DefaultVaultSecretsPath = "/vault/secrets/db"
 
 // LoadVaultSecrets يقرأ ملف secrets المكتوب بواسطة Vault Agent
 // ويحمّل القيم كـ env vars — يتغلب على أي قيمة موجودة مسبقاً
-// إذا لم يكن الملف موجوداً يتجاهل بصمت (Vault غير مفعّل)
+// F-ING22: يُسجّل warning عند غياب الملف بدلاً من التجاهل الصامت
 func LoadVaultSecrets(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
+		// F-ING22: log warning بدلاً من return nil صامت
+		slog.Warn("vault secrets file not found - using env vars", "path", path)
 		return nil
 	}
 
@@ -31,7 +34,9 @@ func LoadVaultSecrets(path string) error {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	lineNum := 0
 	for scanner.Scan() {
+		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -39,7 +44,8 @@ func LoadVaultSecrets(path string) error {
 
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
-			continue
+			// F-ING13: return parse error بدلاً من continue صامت
+			return fmt.Errorf("parse vault secret line %d: %w", lineNum, fmt.Errorf("invalid format %q (expected KEY=VALUE)", line))
 		}
 
 		key := strings.TrimSpace(parts[0])

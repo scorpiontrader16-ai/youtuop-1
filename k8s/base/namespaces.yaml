@@ -49,7 +49,7 @@ metadata:
 # Vault يُدار بـ Terraform (infra/terraform/modules/vault/main.tf)
 # هذا الـ namespace يستضيف:
 #   • vault pods (HA Raft × 3، ARM64)
-#   • vault-auth-config Job (bootstrap kubernetes auth + policies)
+#   • vault-auth-config Job + CronJob fallback (bootstrap kubernetes auth + policies)
 #
 # PSS baseline — الـ Vault Helm chart يشتغل بـ UID 100 (non-root)
 # لكنه يحتاج بعض المرونة في الـ volume mounts → baseline وليس restricted

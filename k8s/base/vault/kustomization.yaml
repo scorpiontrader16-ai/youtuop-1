@@ -8,3 +8,4 @@ resources:
   - certificate.yaml
   - external-secrets.yaml
   - vault-auth-config.yaml
+  - vault-auth-config-cronjob.yaml

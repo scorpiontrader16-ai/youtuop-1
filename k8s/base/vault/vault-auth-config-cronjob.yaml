@@ -1,0 +1,114 @@
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  vault-auth-config-cronjob.yaml — F-VAULT10 Fallback                ║
+# ║  CronJob fallback إذا فشل ArgoCD PostSync hook                      ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-auth-config-fallback
+  namespace: vault
+  labels:
+    app.kubernetes.io/name: vault-auth-config-fallback
+    app.kubernetes.io/component: fallback
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/part-of: youtuop-platform
+spec:
+  schedule: "*/30 * * * *"  # كل 30 دقيقة
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vault-auth-config-fallback
+            app.kubernetes.io/component: fallback
+        spec:
+          serviceAccountName: vault-config-job
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          nodeSelector:
+            kubernetes.io/arch: arm64
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+          containers:
+            - name: vault-config-check
+              image: hashicorp/vault:1.19.0
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  
+                  # تحقق من أن Vault جاهز
+                  if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+                    echo "Vault not ready — skipping"
+                    exit 0
+                  fi
+                  
+                  # تحقق من أن kubernetes auth موجود
+                  if vault auth list | grep -q "kubernetes/"; then
+                    echo "Kubernetes auth already configured — OK"
+                    exit 0
+                  fi
+                  
+                  echo "Kubernetes auth missing — triggering bootstrap Job"
+                  # إنشاء Job جديد بـ timestamp
+                  kubectl create job "vault-auth-config-$(date +%s)" \
+                    --from=job/vault-auth-config \
+                    --namespace=vault || echo "Job creation failed"
+              env:
+                - name: VAULT_ADDR
+                  value: "https://vault.vault.svc.cluster.local:8200"
+                - name: VAULT_CACERT
+                  value: "/vault/tls/ca.crt"
+                - name: VAULT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: vault-bootstrap-token
+                      key: token
+                      optional: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+                - name: vault-tls
+                  mountPath: /vault/tls
+                  readOnly: true
+          volumes:
+            - name: tmp
+              emptyDir: {}
+            - name: vault-tls
+              secret:
+                secretName: vault-tls-secret
+                optional: true
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+
+# ╔══════════════════════════════════════════════════════════════════════╗
+# ║  ROLLBACK INSTRUCTIONS                                               ║
+# ╚══════════════════════════════════════════════════════════════════════╝
+# To disable this CronJob:
+#   kubectl patch cronjob vault-auth-config-fallback -n vault -p '{"spec":{"suspend":true}}'
+# 
+# To delete this CronJob:
+#   kubectl delete cronjob vault-auth-config-fallback -n vault
+#
+# To restore original Job-only behavior:
+#   Remove this file from kustomization.yaml resources list
