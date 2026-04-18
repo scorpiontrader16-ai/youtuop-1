@@ -140,8 +140,9 @@ jobs:
           echo "prod_file=${PROD_FILE}"   >> "${GITHUB_OUTPUT}"
           echo "service=${SERVICE}"       >> "${GITHUB_OUTPUT}"
           echo "Inputs validated — service=${SERVICE} version=${VERSION}"
-
       - name: Verify image exists in GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           IFS=$'\n\t'
@@ -159,6 +160,7 @@ jobs:
           if ! docker manifest inspect "${IMAGE_URL}" >/dev/null 2>&1; then
             echo "::error::Image not found in GHCR: ${IMAGE_URL}"
             echo "Available versions for ${SERVICE}:"
+            # محاولة عرض الـ versions المتاحة
             curl -sSL \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
               "https://ghcr.io/v2/scorpiontrader16-ai/amnix-finance/${SERVICE}/tags/list" \
