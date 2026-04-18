@@ -90,3 +90,4 @@ audit-results.txt
 
 # ── Pre-commit ───────────────────────────────────────────
 .pre-commit-cache/
+*.save
