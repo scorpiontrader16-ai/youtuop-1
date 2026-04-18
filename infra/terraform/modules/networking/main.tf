@@ -1,26 +1,8 @@
-variable "name" {
-  type = string
-}
 
-variable "cidr" {
-  type = string
-}
 
-variable "azs" {
-  type = list(string)
-}
 
-variable "private_subnets" {
-  type = list(string)
-}
 
-variable "public_subnets" {
-  type = list(string)
-}
 
-variable "cluster_name" {
-  type = string
-}
 
 resource "aws_vpc" "main" {
   cidr_block           = var.cidr
