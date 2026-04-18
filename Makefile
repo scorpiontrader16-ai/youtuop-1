@@ -137,7 +137,7 @@ tiering-run: ## Run tiering job manually (ClickHouse → MinIO)
 	cd services/ingestion && \
 		POSTGRES_HOST=localhost \
 		MINIO_ENDPOINT=localhost:9000 \
-		go run ./cmd/tiering/...
+		go run ./cmd/server
 
 # ─── Lint ─────────────────────────────────────────────────
 .PHONY: lint
