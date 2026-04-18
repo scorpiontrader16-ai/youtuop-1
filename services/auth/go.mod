@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/pquerna/otp v1.4.0
 	github.com/prometheus/client_golang v1.19.0
-	github.com/redis/go-redis/v9 v9.5.1
+	github.com/redis/go-redis/v9 v9.18.0
 	github.com/trustelem/zxcvbn v1.0.1
 	github.com/twilio/twilio-go v1.20.0
 	go.opentelemetry.io/otel v1.40.0
@@ -47,6 +47,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
