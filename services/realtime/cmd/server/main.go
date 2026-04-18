@@ -79,7 +79,7 @@ func loadConfig() (Config, error) {
 	return Config{
 		HTTPPort:     httpPort,
 		OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
-		JWTIssuer:    getEnv("JWT_ISSUER", "https://auth.youtuop-1.com"),
+		JWTIssuer:    getEnv("JWT_ISSUER", "https://auth.amnixfinance.com"),
 		JWKSEndpoint: getEnv("JWKS_ENDPOINT", "http://auth-stable.platform.svc.cluster.local:9092/.well-known/jwks.json"),
 	}, nil
 }
@@ -302,8 +302,8 @@ func makeWSHandler(cfg Config, h *hub.Hub, log *zap.Logger) http.HandlerFunc {
 		// 2. Upgrade to WebSocket
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 			OriginPatterns: []string{
-				"app.youtuop-1.com",
-				"developers.youtuop-1.com",
+				"app.amnixfinance.com",
+				"developers.amnixfinance.com",
 				"localhost:*",
 			},
 		})

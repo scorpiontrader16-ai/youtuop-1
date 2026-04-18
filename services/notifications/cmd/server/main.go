@@ -67,7 +67,7 @@ func loadConfig() (Config, error) {
 		OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
 		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
 		FromName:     getEnv("EMAIL_FROM_NAME", "youtuop Platform"),
-		FromEmail:    getEnv("EMAIL_FROM_ADDR", "noreply@youtuop-1.com"),
+		FromEmail:    getEnv("EMAIL_FROM_ADDR", "noreply@amnixfinance.com"),
 	}, nil
 }
 

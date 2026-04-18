@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package processing.v1;
 
-option go_package = "github.com/scorpiontrader16-ai/youtuop-1/gen/processing/v1;processingv1";
+option go_package = "github.com/scorpiontrader16-ai/AmniX-Finance/gen/processing/v1;processingv1";
 
 import "google/protobuf/timestamp.proto";
 import "events/v1/event.proto";

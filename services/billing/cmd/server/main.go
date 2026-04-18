@@ -77,7 +77,7 @@ func loadConfig() (Config, error) {
 		StripePricePro:        getEnv("STRIPE_PRICE_PRO", ""),
 		StripePriceBusiness:   getEnv("STRIPE_PRICE_BUSINESS", ""),
 		StripePriceEnterprise: getEnv("STRIPE_PRICE_ENTERPRISE", ""),
-		FrontendURL:           getEnv("FRONTEND_URL", "https://app.youtuop-1.com"),
+		FrontendURL:           getEnv("FRONTEND_URL", "https://app.amnixfinance.com"),
 	}, nil
 }
 

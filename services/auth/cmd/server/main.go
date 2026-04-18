@@ -91,7 +91,7 @@ func loadConfig() (Config, error) {
 		KeycloakURL:      getEnv("KEYCLOAK_URL", "http://keycloak:8080"),
 		KeycloakRealm:    getEnv("KEYCLOAK_REALM", "youtuop"),
 		KeycloakClientID: getEnv("KEYCLOAK_CLIENT_ID", "youtuop-backend"),
-		JWTIssuer:        getEnv("JWT_ISSUER", "https://auth.youtuop-1.com"),
+		JWTIssuer:        getEnv("JWT_ISSUER", "https://auth.amnixfinance.com"),
 	}, nil
 }
 

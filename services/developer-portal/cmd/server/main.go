@@ -72,7 +72,7 @@ func loadConfig() (Config, error) {
 	return Config{
 		HTTPPort:     httpPort,
 		OTLPEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317"),
-		PortalURL:    getEnv("PORTAL_URL", "https://developers.youtuop-1.com"),
+		PortalURL:    getEnv("PORTAL_URL", "https://developers.amnixfinance.com"),
 	}, nil
 }
 

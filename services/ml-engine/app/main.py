@@ -129,7 +129,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://app.youtuop-1.com", "https://developers.youtuop-1.com"],
+    allow_origins=["https://app.amnixfinance.com", "https://developers.amnixfinance.com"],
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type", "x-tenant-id", "x-user-id"],
 )
