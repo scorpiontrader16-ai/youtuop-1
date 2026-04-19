@@ -4,6 +4,11 @@
 # ║  Fix F-TF01-B: mirrormaker instance_type + volume sizes → var.*  ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
+terraform {
+  required_version = ">= 1.9.0"
+}
+
+
 # ── S3 Tiered Storage ────────────────────────────────────────────────────
 resource "aws_s3_bucket" "tiered" {
   bucket = "${var.cluster_name}-redpanda-tiered"

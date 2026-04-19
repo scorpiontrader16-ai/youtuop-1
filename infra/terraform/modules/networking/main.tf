@@ -7,6 +7,11 @@
 # ║    Fix: one EIP + one NAT per AZ, one route table per AZ.        ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
+
+terraform {
+  required_version = ">= 1.9.0"
+}
+
 resource "aws_vpc" "main" {
   cidr_block           = var.cidr
   enable_dns_hostnames = true

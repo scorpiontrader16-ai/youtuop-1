@@ -5,6 +5,11 @@
 # ║  Fix F-TF01-B: all hardcoded values replaced with var.*          ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
+
+terraform {
+  required_version = ">= 1.9.0"
+}
+
 resource "aws_db_subnet_group" "main" {
   name       = "${var.cluster_name}-db"
   subnet_ids = var.subnet_ids

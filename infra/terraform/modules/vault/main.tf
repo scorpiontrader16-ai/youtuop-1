@@ -5,6 +5,11 @@
 # ║  H-05: ec2 vault role removed — all policies on vault_irsa OIDC  ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
+terraform {
+  required_version = ">= 1.9.0"
+}
+
+
 resource "aws_iam_role_policy" "vault_kms" {
   name = "vault-kms-unseal"
   role = aws_iam_role.vault_irsa.name

@@ -864,7 +864,7 @@ jobs:
       - name: Setup Terraform 1.7
         uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85  # v4
         with:
-          terraform_version: '1.7.0'
+          terraform_version: '1.9.5'
       - name: Validate Production
         working-directory: infra/terraform/environments/production
         run: |
