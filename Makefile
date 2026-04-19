@@ -131,13 +131,9 @@ test-integration: test-schema test-clickhouse test-postgres ## Run all integrati
 	@echo "✅ All integration tests passed"
 
 # ─── Tiering ──────────────────────────────────────────────
-.PHONY: tiering-run
-
-tiering-run: ## Run tiering job manually (ClickHouse → MinIO)
-	cd services/ingestion && \
-		POSTGRES_HOST=localhost \
-		MINIO_ENDPOINT=localhost:9000 \
-		go run ./cmd/server
+# NOTE: tiering job is an internal package (internal/tiering/job.go)
+# that requires postgres.Client + coldstore.Writer wiring.
+# It runs automatically inside cmd/server — no standalone target.
 
 # ─── Lint ─────────────────────────────────────────────────
 .PHONY: lint
