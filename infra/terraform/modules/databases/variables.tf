@@ -1,8 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  Full path: infra/terraform/modules/databases/variables.tf       ║
+# ║  Status: ✏️ MODIFIED                                             ║
 # ║  Fix F-TF01: removed leaked resource block                       ║
 # ║  Fix F-TF05: postgres_instance default → db.t4g.medium           ║
 # ║  Fix F-TF06: multi_az default → true (production-safe)           ║
+# ║  Fix F-TF03-egress: added vpc_cidr for restricted egress rule    ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 variable "cluster_name" {
@@ -13,6 +15,23 @@ variable "cluster_name" {
 variable "vpc_id" {
   type        = string
   description = "VPC ID from networking module"
+}
+
+# F-TF03-egress: used to restrict the RDS security group egress rule to within
+# the VPC only. Without this, egress was open to 0.0.0.0/0 — unnecessary for RDS.
+variable "vpc_cidr" {
+  type        = string
+  description = "VPC CIDR block — restricts RDS security group egress to within the VPC only."
+
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr, 0))
+    error_message = "vpc_cidr must be a valid CIDR block (e.g. 10.0.0.0/16)."
+  }
+
+  validation {
+    condition     = !contains(["0.0.0.0/0", "::/0"], var.vpc_cidr)
+    error_message = "vpc_cidr must NOT be 0.0.0.0/0 or ::/0."
+  }
 }
 
 variable "eks_node_cidr" {
@@ -32,7 +51,7 @@ variable "environment" {
 
 # F-TF05: default changed from db.r8g.large → db.t4g.medium
 # db.r8g.large costs ~$0.48/hr — dangerous default for dev/staging.
-# Production and eu-west-1 must explicitly set db.r8g.large in their module calls.
+# Production must explicitly set db.r8g.large in its module call.
 variable "postgres_instance" {
   type        = string
   default     = "db.t4g.medium"

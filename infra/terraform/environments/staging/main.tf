@@ -1,3 +1,10 @@
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Full path: infra/terraform/environments/staging/main.tf         ║
+# ║  Status: ✏️ MODIFIED                                             ║
+# ║  Fix F-TF01: replaced every hardcoded CIDR / count / type        ║
+# ║              with the corresponding var.* reference               ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
 terraform {
   required_providers {
     aws = {
@@ -18,49 +25,54 @@ provider "aws" {
   }
 }
 
-
-
+# ── VPC ──────────────────────────────────────────────────────────────────
 module "vpc" {
   source          = "../../modules/networking"
   name            = "platform-staging"
-  cidr            = "10.1.0.0/16"
+  cidr            = var.vpc_cidr
   azs             = var.availability_zones
-  private_subnets = ["10.1.1.0/24", "10.1.2.0/24"]
-  public_subnets  = ["10.1.101.0/24", "10.1.102.0/24"]
+  private_subnets = var.private_subnets
+  public_subnets  = var.public_subnets
   cluster_name    = var.cluster_name
 }
 
+# ── EKS Cluster ──────────────────────────────────────────────────────────
 module "cluster" {
   source                  = "../../modules/cluster"
   cluster_name            = var.cluster_name
   environment             = "staging"
   vpc_id                  = module.vpc.vpc_id
   subnet_ids              = module.vpc.private_subnet_ids
-  # H-03: restricted to staging VPC only — update to VPN CIDR when bastion is ready
-  eks_public_access_cidrs = ["10.1.0.0/16"]
+  # H-03: see var.eks_public_access_cidrs in variables.tf
+  eks_public_access_cidrs = var.eks_public_access_cidrs
 }
 
+# ── Databases ─────────────────────────────────────────────────────────────
 module "databases" {
-  source         = "../../modules/databases"
-  cluster_name   = var.cluster_name
-  environment    = "staging"
-  vpc_id         = module.vpc.vpc_id
-  subnet_ids     = module.vpc.private_subnet_ids
-  multi_az       = false
-  # H-04: restricted to staging private subnets only
-  eks_node_cidr  = "10.1.0.0/16"
+  source        = "../../modules/databases"
+  cluster_name  = var.cluster_name
+  environment   = "staging"
+  vpc_id        = module.vpc.vpc_id
+  vpc_cidr      = var.vpc_cidr
+  subnet_ids    = module.vpc.private_subnet_ids
+  # Staging does not require Multi-AZ — explicit override of production-safe default (true)
+  multi_az      = false
+  # H-04: see var.eks_node_cidr in variables.tf
+  eks_node_cidr = var.eks_node_cidr
 }
 
+# ── Redpanda ──────────────────────────────────────────────────────────────
 module "redpanda" {
   source             = "../../modules/redpanda"
   cluster_name       = var.cluster_name
   environment        = "staging"
-  broker_count       = 1
-  instance_type      = "im4gn.xlarge"
+  broker_count       = var.redpanda_broker_count
+  instance_type      = var.redpanda_instance_type
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnet_ids
 }
 
+# ── Vault ─────────────────────────────────────────────────────────────────
 module "vault" {
   source            = "../../modules/vault"
   cluster_name      = var.cluster_name
@@ -70,6 +82,7 @@ module "vault" {
   oidc_provider_url = module.cluster.oidc_provider_url
 }
 
+# ── Outputs ───────────────────────────────────────────────────────────────
 output "eso_role_arn" {
   value = module.vault.eso_role_arn
 }

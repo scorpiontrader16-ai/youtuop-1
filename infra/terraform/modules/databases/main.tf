@@ -1,6 +1,8 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  Full path: infra/terraform/modules/databases/main.tf            ║
-# ║  Fix F-TF03: added precondition blocks to postgres security group ║
+# ║  Status: ✏️ MODIFIED                                             ║
+# ║  Fix F-TF03: precondition blocks on postgres security group      ║
+# ║  Fix F-TF03-egress: egress restricted from 0.0.0.0/0 → vpc_cidr ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 resource "aws_db_subnet_group" "main" {
@@ -11,28 +13,32 @@ resource "aws_db_subnet_group" "main" {
 
 resource "aws_security_group" "postgres" {
   name        = "${var.cluster_name}-postgres"
-  description = "PostgreSQL access from VPC only"
+  description = "PostgreSQL access from EKS nodes only"
   vpc_id      = var.vpc_id
 
   ingress {
-    description = "PostgreSQL from VPC"
+    description = "PostgreSQL from EKS node CIDR"
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = [var.eks_node_cidr]
   }
 
+  # F-TF03-egress: restricted from 0.0.0.0/0 to var.vpc_cidr only.
+  # RDS does not initiate connections outside the VPC.
+  # Limiting to vpc_cidr covers Multi-AZ standby replication traffic
+  # while blocking all unintended outbound paths.
   egress {
+    description = "Allow outbound within VPC only (Multi-AZ replication traffic)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   tags = { Environment = var.environment }
 
   # F-TF03: precondition validates eks_node_cidr before Terraform creates the SG.
-  # Prevents accidental open access if a wildcard CIDR is passed.
   # Plan-time failure is better than a misconfigured firewall rule in production.
   lifecycle {
     precondition {
