@@ -1,32 +1,35 @@
-# Variables extracted from main.tf
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Full path: infra/terraform/modules/vault/variables.tf           ║
+# ║  Fix F-TF01: removed leaked resource block (vault_kms policy)    ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
 variable "cluster_name" {
-  type = string
+  type        = string
+  description = "EKS cluster name — used as prefix for IAM roles and S3 bucket"
 }
 
 variable "environment" {
-  type = string
+  type        = string
+  description = "Deployment environment (staging | production)"
 }
 
 variable "kms_key_id" {
-  type = string
+  type        = string
+  description = "KMS key ARN for Vault auto-unseal and S3 encryption"
 }
 
 variable "oidc_provider_arn" {
-  type = string
+  type        = string
+  description = "EKS OIDC provider ARN for IRSA trust policy"
 }
 
 variable "oidc_provider_url" {
-  type = string
+  type        = string
+  description = "EKS OIDC provider URL (without https://) for condition keys"
 }
 
 variable "namespace" {
-  type    = string
-  default = "platform"
+  type        = string
+  default     = "platform"
+  description = "Kubernetes namespace for platform workloads"
 }
-
-# H-05: ec2-based vault IAM role removed — all policies migrated to vault_irsa (OIDC)
-# This eliminates the ec2 principal which allowed any EC2 instance to assume the role
-
-resource "aws_iam_role_policy" "vault_kms" {
-  name = "vault-kms-unseal"
-  # H-05: migrated from ec2 vault role to OIDC vault_irsa role

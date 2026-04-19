@@ -1,45 +1,36 @@
-# Variables extracted from main.tf
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Full path: infra/terraform/modules/redpanda/variables.tf        ║
+# ║  Fix F-TF01: removed leaked resource blocks                      ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
 variable "cluster_name" {
-  type = string
+  type        = string
+  description = "Cluster name — used as prefix for all Redpanda resources"
 }
 
 variable "broker_count" {
-  type    = number
-  default = 3
+  type        = number
+  default     = 3
+  description = "Number of Redpanda broker EC2 instances"
 }
 
 variable "instance_type" {
-  type    = string
-  default = "im4gn.xlarge"
+  type        = string
+  default     = "im4gn.xlarge"
+  description = "EC2 instance type for Redpanda brokers (NVMe-optimized recommended)"
 }
 
 variable "environment" {
-  type = string
+  type        = string
+  description = "Deployment environment (staging | production)"
 }
 
 variable "vpc_id" {
   type        = string
-  description = "VPC ID من networking module"
+  description = "VPC ID from networking module"
 }
 
 variable "private_subnet_ids" {
   type        = list(string)
-  description = "Private subnet IDs من networking module"
+  description = "Private subnet IDs from networking module"
 }
-
-# ── S3 Tiered Storage ────────────────────────────────────────────────────
-resource "aws_s3_bucket" "tiered" {
-  bucket = "${var.cluster_name}-redpanda-tiered"
-  tags   = { Environment = var.environment }
-}
-
-resource "aws_s3_bucket_versioning" "tiered" {
-  bucket = aws_s3_bucket.tiered.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "tiered" {
-  bucket = aws_s3_bucket.tiered.id
-  rule {

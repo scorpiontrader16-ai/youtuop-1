@@ -50,9 +50,11 @@ module "databases" {
   environment    = "production"
   vpc_id         = module.vpc.vpc_id
   subnet_ids     = module.vpc.private_subnet_ids
-  multi_az       = true
+  multi_az          = true
+  # F-TF05: explicit override required — default changed to db.t4g.medium for dev safety
+  postgres_instance = "db.r8g.large"
   # H-04: restricted to production private subnets only
-  eks_node_cidr  = "10.0.0.0/16"
+  eks_node_cidr     = "10.0.0.0/16"
 }
 
 # ── Redpanda ──────────────────────────────────────────────────────────────

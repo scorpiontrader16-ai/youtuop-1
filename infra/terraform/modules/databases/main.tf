@@ -1,8 +1,7 @@
-
-
-
-
-
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Full path: infra/terraform/modules/databases/main.tf            ║
+# ║  Fix F-TF03: added precondition blocks to postgres security group ║
+# ╚══════════════════════════════════════════════════════════════════╝
 
 resource "aws_db_subnet_group" "main" {
   name       = "${var.cluster_name}-db"
@@ -20,7 +19,7 @@ resource "aws_security_group" "postgres" {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = [var.eks_node_cidr] # Restricted to EKS node subnet only — not entire VPC
+    cidr_blocks = [var.eks_node_cidr]
   }
 
   egress {
@@ -31,6 +30,20 @@ resource "aws_security_group" "postgres" {
   }
 
   tags = { Environment = var.environment }
+
+  # F-TF03: precondition validates eks_node_cidr before Terraform creates the SG.
+  # Prevents accidental open access if a wildcard CIDR is passed.
+  # Plan-time failure is better than a misconfigured firewall rule in production.
+  lifecycle {
+    precondition {
+      condition     = can(cidrhost(var.eks_node_cidr, 0))
+      error_message = "eks_node_cidr must be a valid CIDR block (e.g. 10.0.2.0/24)."
+    }
+    precondition {
+      condition     = !contains(["0.0.0.0/0", "::/0"], var.eks_node_cidr)
+      error_message = "eks_node_cidr must NOT be 0.0.0.0/0 or ::/0. Restrict to specific EKS node subnet CIDR."
+    }
+  }
 }
 
 resource "aws_db_instance" "postgres" {

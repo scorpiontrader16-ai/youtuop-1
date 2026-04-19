@@ -37,6 +37,20 @@ resource "aws_eks_cluster" "main" {
     public_access_cidrs = var.eks_public_access_cidrs
   }
 
+  # F-TF04: API mode enables EKS Access Entries — replaces legacy aws-auth ConfigMap.
+  # bootstrap_cluster_creator_admin_permissions = false — no implicit admin.
+  # All cluster access must be granted explicitly via aws_eks_access_entry resources.
+  access_config {
+    authentication_mode                         = "API"
+    bootstrap_cluster_creator_admin_permissions = false
+  }
+
+  # F-TF04: EXTENDED support = 14 months per minor version vs 4 months standard.
+  # Reduces forced upgrade pressure and emergency maintenance windows in production.
+  upgrade_policy {
+    support_type = "EXTENDED"
+  }
+
   encryption_config {
     provider {
       key_arn = aws_kms_key.eks.arn

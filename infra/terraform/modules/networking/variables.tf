@@ -1,42 +1,34 @@
-# Variables extracted from main.tf
+# ╔══════════════════════════════════════════════════════════════════╗
+# ║  Full path: infra/terraform/modules/networking/variables.tf      ║
+# ║  Fix F-TF01: removed leaked resource block (aws_vpc)             ║
+# ╚══════════════════════════════════════════════════════════════════╝
+
 variable "name" {
-  type = string
+  type        = string
+  description = "Name prefix for all networking resources"
 }
 
 variable "cidr" {
-  type = string
+  type        = string
+  description = "VPC CIDR block"
 }
 
 variable "azs" {
-  type = list(string)
+  type        = list(string)
+  description = "List of availability zones to deploy subnets into"
 }
 
 variable "private_subnets" {
-  type = list(string)
+  type        = list(string)
+  description = "CIDR blocks for private subnets (one per AZ)"
 }
 
 variable "public_subnets" {
-  type = list(string)
+  type        = list(string)
+  description = "CIDR blocks for public subnets (one per AZ)"
 }
 
 variable "cluster_name" {
-  type = string
+  type        = string
+  description = "EKS cluster name — used for kubernetes.io/cluster/* tags"
 }
-
-resource "aws_vpc" "main" {
-  cidr_block           = var.cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-
-  tags = {
-    Name                                        = var.name
-    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
-  }
-}
-
-resource "aws_subnet" "private" {
-  count             = length(var.private_subnets)
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = var.private_subnets[count.index]
-  availability_zone = var.azs[count.index]
-
