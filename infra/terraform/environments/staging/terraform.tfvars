@@ -24,3 +24,10 @@ github_repo = "AmniX-Finance"
 # ── RDS ───────────────────────────────────────────────────────────────────
 # Fix F-TF01-C: multi_az was hardcoded false in main.tf — now explicit
 multi_az = false
+
+# ── Account-Global Resources ──────────────────────────────────────────────
+create_account_global_resources = true
+
+# ── CloudTrail ───────────────────────────────────────────────────────────
+# H-03: staging is a separate account — owns its own multi-region trail
+cloudtrail_multi_region = true

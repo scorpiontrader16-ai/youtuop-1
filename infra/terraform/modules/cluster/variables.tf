@@ -133,3 +133,25 @@ variable "external_secrets_version" {
   default     = "0.9.13"
   description = "Helm chart version for external-secrets-operator. Pin explicitly. See: https://github.com/external-secrets/external-secrets/releases"
 }
+
+# ── Account-Global Resources Gate ────────────────────────────────────────
+# C-01/C-02: aws_iam_openid_connect_provider.github and
+# aws_s3_account_public_access_block are AWS account-global resources.
+# Only ONE Terraform state per account may own them.
+# Set true in the primary state (production us-east-1, or standalone staging).
+# Set false in all secondary states (eu-west-1) to prevent EntityAlreadyExists.
+variable "create_account_global_resources" {
+  type        = bool
+  description = "Create account-global resources: GitHub OIDC provider + S3 account public access block. Set true in primary state only. Set false in secondary states (eu-west-1) to prevent conflicts."
+}
+
+# ── CloudTrail ────────────────────────────────────────────────────────────
+# H-03: only one state per AWS account should own the multi-region trail.
+# Primary state (production us-east-1) sets true.
+# Secondary states (eu-west-1) set false — primary trail already covers all regions.
+# Duplicate multi-region trails = duplicate logs + unnecessary cost.
+variable "cloudtrail_multi_region" {
+  type        = bool
+  default     = true
+  description = "Enable multi-region CloudTrail. Set true in primary state only. Set false in secondary states (eu-west-1) to prevent duplicate trails."
+}

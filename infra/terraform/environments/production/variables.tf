@@ -97,3 +97,19 @@ variable "postgres_instance" {
     error_message = "postgres_instance must be a valid RDS instance class (e.g. db.r8g.large, db.t4g.medium)."
   }
 }
+
+# ── Account-Global Resources ──────────────────────────────────────────────
+# C-01/C-02: production us-east-1 is the primary state — it owns account-global resources.
+variable "create_account_global_resources" {
+  description = "Create account-global resources (GitHub OIDC + S3 account block). True for primary state."
+  type        = bool
+  default     = true
+}
+
+# ── CloudTrail ───────────────────────────────────────────────────────────
+# H-03: production us-east-1 = primary state — owns the multi-region trail
+variable "cloudtrail_multi_region" {
+  description = "Enable multi-region CloudTrail. True for primary state, false for secondary."
+  type        = bool
+  default     = true
+}

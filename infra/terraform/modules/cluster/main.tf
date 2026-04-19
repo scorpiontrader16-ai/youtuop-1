@@ -163,19 +163,24 @@ resource "aws_iam_role_policy_attachment" "node_policies" {
 
 # ── OIDC — GitHub Actions ────────────────────────────────────────────────
 # F-TF01-B: github org/repo/branch extracted to variables — no hardcoded repo path
+# C-01: count gate — only created by primary state (create_account_global_resources = true).
+# eu-west-1 and secondary states set false to prevent EntityAlreadyExists error.
 resource "aws_iam_openid_connect_provider" "github" {
+  count           = var.create_account_global_resources ? 1 : 0
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
 }
 
 resource "aws_iam_role" "github_actions" {
-  name = "${var.cluster_name}-github-actions"
+  # C-01: same gate as github OIDC provider above.
+  count = var.create_account_global_resources ? 1 : 0
+  name  = "${var.cluster_name}-github-actions"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+      Principal = { Federated = aws_iam_openid_connect_provider.github[0].arn }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
@@ -287,7 +292,11 @@ resource "aws_cloudtrail" "main" {
   name                          = "${var.cluster_name}-trail"
   s3_bucket_name                = aws_s3_bucket.cloudtrail.id
   include_global_service_events = true
-  is_multi_region_trail         = true
+  # H-03: controlled per-state to prevent duplicate multi-region trails.
+  # Only the primary state (production us-east-1) sets this to true.
+  # eu-west-1 sets false — production trail already covers all regions.
+  # Two multi-region trails in the same account = duplicate logs + double cost.
+  is_multi_region_trail         = var.cloudtrail_multi_region
   enable_log_file_validation    = true
   kms_key_id                    = aws_kms_key.eks.arn
 
@@ -307,7 +316,10 @@ resource "aws_cloudtrail" "main" {
 }
 
 # ── S3 Public Access Block — Account Level ───────────────────────────────
+# C-02: account-global resource — only one state per account may own it.
+# Secondary states (eu-west-1) set create_account_global_resources = false.
 resource "aws_s3_account_public_access_block" "main" {
+  count                   = var.create_account_global_resources ? 1 : 0
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -373,7 +385,8 @@ output "kms_key_id" {
 }
 
 output "github_actions_role_arn" {
-  value = aws_iam_role.github_actions.arn
+  # Returns ARN when primary state, empty string when secondary state.
+  value = var.create_account_global_resources ? aws_iam_role.github_actions[0].arn : ""
 }
 
 output "oidc_provider_arn" {

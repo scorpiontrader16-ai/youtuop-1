@@ -137,3 +137,20 @@ variable "postgres_instance" {
     error_message = "postgres_instance must be a valid RDS instance class (e.g. db.r8g.large, db.t4g.medium)."
   }
 }
+
+# ── Account-Global Resources ──────────────────────────────────────────────
+# C-01/C-02: eu-west-1 is secondary — production us-east-1 owns these resources.
+# Must remain false to prevent EntityAlreadyExists conflicts.
+variable "create_account_global_resources" {
+  description = "Create account-global resources. Must be false for eu-west-1."
+  type        = bool
+  default     = false
+}
+
+# ── CloudTrail ───────────────────────────────────────────────────────────
+# H-03: eu-west-1 = secondary state — production trail covers all regions
+variable "cloudtrail_multi_region" {
+  description = "Enable multi-region CloudTrail. Must be false for eu-west-1."
+  type        = bool
+  default     = false
+}

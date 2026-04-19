@@ -44,3 +44,10 @@ github_repo = "AmniX-Finance"
 # Fix F-TF01-C: previously hardcoded in main.tf — now explicit in tfvars
 multi_az          = true
 postgres_instance = "db.r8g.large"
+
+# ── Account-Global Resources ──────────────────────────────────────────────
+create_account_global_resources = false
+
+# ── CloudTrail ───────────────────────────────────────────────────────────
+# H-03: false — production us-east-1 trail already covers eu-west-1 events
+cloudtrail_multi_region = false

@@ -82,3 +82,20 @@ variable "multi_az" {
   type        = bool
   default     = false
 }
+
+# ── Account-Global Resources ──────────────────────────────────────────────
+# C-01/C-02: staging assumed to be a separate AWS account from production.
+# If sharing the same account, set false and let production own these resources.
+variable "create_account_global_resources" {
+  description = "Create account-global resources (GitHub OIDC + S3 account block). True if primary state for this AWS account."
+  type        = bool
+  default     = true
+}
+
+# ── CloudTrail ───────────────────────────────────────────────────────────
+# H-03: staging = separate account — owns its own multi-region trail
+variable "cloudtrail_multi_region" {
+  description = "Enable multi-region CloudTrail. True for primary state, false for secondary."
+  type        = bool
+  default     = true
+}

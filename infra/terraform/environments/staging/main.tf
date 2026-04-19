@@ -37,6 +37,23 @@ provider "aws" {
   }
 }
 
+# ── Helm Provider ─────────────────────────────────────────────────────────
+# C-03: helm provider configured with EKS credentials via exec plugin.
+# Requires aws CLI available in the execution environment (CI/CD or local).
+provider "helm" {
+  kubernetes {
+    host                   = module.cluster.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.cluster.cluster_ca_data)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", var.cluster_name, "--region", var.aws_region]
+    }
+  }
+}
+
+provider "tls" {}
+
 module "vpc" {
   source          = "../../modules/networking"
   name            = "platform-staging"
@@ -48,14 +65,16 @@ module "vpc" {
 }
 
 module "cluster" {
-  source                  = "../../modules/cluster"
-  cluster_name            = var.cluster_name
-  environment             = "staging"
-  vpc_id                  = module.vpc.vpc_id
-  subnet_ids              = module.vpc.private_subnet_ids
-  eks_public_access_cidrs = var.eks_public_access_cidrs
-  github_org              = var.github_org
-  github_repo             = var.github_repo
+  source                          = "../../modules/cluster"
+  cluster_name                    = var.cluster_name
+  environment                     = "staging"
+  vpc_id                          = module.vpc.vpc_id
+  subnet_ids                      = module.vpc.private_subnet_ids
+  eks_public_access_cidrs         = var.eks_public_access_cidrs
+  github_org                      = var.github_org
+  github_repo                     = var.github_repo
+  create_account_global_resources = var.create_account_global_resources
+  cloudtrail_multi_region         = var.cloudtrail_multi_region
 }
 
 module "databases" {
