@@ -1,14 +1,18 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  Full path: infra/terraform/modules/vault/main.tf                ║
-# ║  Fix VAULT-REGION-BUG: region = var.aws_region (was "us-east-1")║
+# ║  Fix VAULT-REGION-BUG: region = var.aws_region                   ║
 # ║  Fix F-TF01-B: vault_version + vault_ha_replicas → var.*         ║
-# ║  H-05: ec2 vault role removed — all policies on vault_irsa OIDC  ║
+# ║  Fix H-05: ec2 vault role removed — all policies on vault_irsa   ║
+# ║  Fix HIGH-04: added timeout=600 + atomic=true + wait=true        ║
+# ║    Vault HA Raft init takes >5min default timeout → apply fails  ║
+# ║    atomic=true ensures full rollback on failure                   ║
+# ║  Fix MEDIUM-01: removed duplicate vault_role_arn output          ║
+# ║    vault_irsa_role_arn is the canonical output name              ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 terraform {
   required_version = ">= 1.9.0"
 }
-
 
 resource "aws_iam_role_policy" "vault_kms" {
   name = "vault-kms-unseal"
@@ -132,11 +136,13 @@ resource "aws_iam_role_policy" "eso_secrets" {
   })
 }
 
-# VAULT-REGION-BUG FIX: storage.s3.region now uses var.aws_region.
-# Previous hardcoded "us-east-1" caused Vault to fail in eu-west-1 because
-# the S3 bucket is created in the provider region (eu-west-1) but Vault
-# attempted to connect to it via the us-east-1 endpoint.
-# F-TF01-B: version → var.vault_version, replicas → var.vault_ha_replicas
+# HIGH-04 FIX: timeout + atomic + wait added.
+# Vault HA with Raft consensus requires all 3 replicas to elect a leader
+# before the Helm release is considered ready. This takes > 5 minutes
+# (the Helm default timeout), causing apply to fail even though Vault
+# is healthy. timeout=600 (10 min) gives Raft enough time to converge.
+# atomic=true: if deploy fails, Helm rolls back completely — no partial state.
+# wait=true: Terraform waits for all pods Ready before marking success.
 resource "helm_release" "vault" {
   name             = "vault"
   repository       = "https://helm.releases.hashicorp.com"
@@ -144,6 +150,9 @@ resource "helm_release" "vault" {
   version          = var.vault_version
   namespace        = "vault"
   create_namespace = true
+  timeout          = 600
+  atomic           = true
+  wait             = true
 
   values = [
     yamlencode({
@@ -180,16 +189,17 @@ resource "helm_release" "vault" {
   depends_on = [aws_iam_role.vault_irsa]
 }
 
-output "vault_role_arn" {
-  value = aws_iam_role.vault_irsa.arn
+# ── Outputs ──────────────────────────────────────────────────────────────
+# MEDIUM-01 FIX: removed duplicate vault_role_arn output.
+# vault_irsa_role_arn is the canonical name — use it for all references.
+# vault_role_arn was an alias pointing to the same value — dead duplicate.
+output "vault_irsa_role_arn" {
+  value       = aws_iam_role.vault_irsa.arn
+  description = "IAM role ARN for Vault IRSA — use this in all module references."
 }
 
 output "vault_storage_bucket" {
   value = aws_s3_bucket.vault.bucket
-}
-
-output "vault_irsa_role_arn" {
-  value = aws_iam_role.vault_irsa.arn
 }
 
 output "eso_role_arn" {
