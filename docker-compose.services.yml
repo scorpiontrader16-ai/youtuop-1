@@ -35,7 +35,7 @@ services:
   auth:
     build:
       context: ./services/auth
-      dockerfile: Dockerfile.arm64
+      dockerfile: Dockerfile
     container_name: auth
     ports:
       - "9092:9092"   # HTTP
@@ -71,7 +71,7 @@ services:
   billing:
     build:
       context: ./services/billing
-      dockerfile: Dockerfile.arm64
+      dockerfile: Dockerfile
     container_name: billing
     ports:
       - "19093:9093"  # HTTP (19093 على الـ host — 9093 مأخوذة بـ processing)
@@ -105,7 +105,7 @@ services:
   notifications:
     build:
       context: ./services/notifications
-      dockerfile: Dockerfile.arm64
+      dockerfile: Dockerfile
     container_name: notifications
     ports:
       - "9094:9094"   # HTTP
@@ -140,7 +140,7 @@ services:
   feature-flags:
     build:
       context: ./services/feature-flags
-      dockerfile: Dockerfile.arm64
+      dockerfile: Dockerfile
     container_name: feature-flags
     ports:
       - "9096:9096"   # HTTP

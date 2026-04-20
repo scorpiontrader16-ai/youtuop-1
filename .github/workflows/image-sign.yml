@@ -65,7 +65,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: .
-          file: services/ingestion/Dockerfile.arm64
+          file: services/ingestion/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -160,7 +160,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: .
-          file: services/processing/Dockerfile.arm64
+          file: services/processing/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -255,7 +255,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/auth
-          file: services/auth/Dockerfile.arm64
+          file: services/auth/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -350,7 +350,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/billing
-          file: services/billing/Dockerfile.arm64
+          file: services/billing/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -445,7 +445,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/notifications
-          file: services/notifications/Dockerfile.arm64
+          file: services/notifications/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -534,7 +534,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/analytics
-          file: services/analytics/Dockerfile.arm64
+          file: services/analytics/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -617,7 +617,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/control-plane
-          file: services/control-plane/Dockerfile.arm64
+          file: services/control-plane/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -700,7 +700,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/developer-portal
-          file: services/developer-portal/Dockerfile.arm64
+          file: services/developer-portal/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -783,7 +783,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/feature-flags
-          file: services/feature-flags/Dockerfile.arm64
+          file: services/feature-flags/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -867,7 +867,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/jobs
-          file: services/jobs/Dockerfile.arm64
+          file: services/jobs/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -951,7 +951,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/realtime
-          file: services/realtime/Dockerfile.arm64
+          file: services/realtime/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -1035,7 +1035,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/search
-          file: services/search/Dockerfile.arm64
+          file: services/search/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -1118,7 +1118,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: services/tenant-operator
-          file: services/tenant-operator/Dockerfile.arm64
+          file: services/tenant-operator/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |
@@ -1369,7 +1369,7 @@ jobs:
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25  # v5
         with:
           context: .
-          file: services/hydration/Dockerfile.arm64
+          file: services/hydration/Dockerfile
           platforms: linux/arm64,linux/amd64
           push: true
           tags: |

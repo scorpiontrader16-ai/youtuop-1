@@ -136,46 +136,46 @@ jobs:
         include:
           - service: ingestion
             context: .
-            dockerfile: services/ingestion/Dockerfile.arm64
+            dockerfile: services/ingestion/Dockerfile
           - service: processing
             context: .
-            dockerfile: services/processing/Dockerfile.arm64
+            dockerfile: services/processing/Dockerfile
           - service: auth
             context: services/auth
-            dockerfile: services/auth/Dockerfile.arm64
+            dockerfile: services/auth/Dockerfile
           - service: billing
             context: services/billing
-            dockerfile: services/billing/Dockerfile.arm64
+            dockerfile: services/billing/Dockerfile
           - service: notifications
             context: services/notifications
-            dockerfile: services/notifications/Dockerfile.arm64
+            dockerfile: services/notifications/Dockerfile
           - service: feature-flags
             context: services/feature-flags
-            dockerfile: services/feature-flags/Dockerfile.arm64
+            dockerfile: services/feature-flags/Dockerfile
           - service: control-plane
             context: services/control-plane
-            dockerfile: services/control-plane/Dockerfile.arm64
+            dockerfile: services/control-plane/Dockerfile
           - service: developer-portal
             context: services/developer-portal
-            dockerfile: services/developer-portal/Dockerfile.arm64
+            dockerfile: services/developer-portal/Dockerfile
           - service: tenant-operator
             context: services/tenant-operator
-            dockerfile: services/tenant-operator/Dockerfile.arm64
+            dockerfile: services/tenant-operator/Dockerfile
           - service: hydration
             context: .
-            dockerfile: services/hydration/Dockerfile.arm64
+            dockerfile: services/hydration/Dockerfile
           - service: analytics
             context: services/analytics
-            dockerfile: services/analytics/Dockerfile.arm64
+            dockerfile: services/analytics/Dockerfile
           - service: search
             context: services/search
-            dockerfile: services/search/Dockerfile.arm64
+            dockerfile: services/search/Dockerfile
           - service: jobs
             context: services/jobs
-            dockerfile: services/jobs/Dockerfile.arm64
+            dockerfile: services/jobs/Dockerfile
           - service: realtime
             context: services/realtime
-            dockerfile: services/realtime/Dockerfile.arm64
+            dockerfile: services/realtime/Dockerfile
           - service: ml-engine
             context: services/ml-engine
             dockerfile: services/ml-engine/Dockerfile

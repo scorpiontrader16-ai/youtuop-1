@@ -94,3 +94,4 @@ audit-results.txt
 *.bak2
 .terraform/
 .terraform.lock.hcl
+services/ingestion/server

@@ -97,7 +97,7 @@ find services -maxdepth 2 -name "go.mod" | sort | while read -r modfile; do
   fi
 
   # Dockerfile
-  if [ -f "$DIR/Dockerfile" ] || [ -f "$DIR/Dockerfile.arm64" ]; then
+  if [ -f "$DIR/Dockerfile" ]; then
     pass "Dockerfile present: $NAME"
   else
     fail "Dockerfile MISSING: $NAME"
@@ -1785,10 +1785,10 @@ for svc in services/*/; do
     [ -f "$svc/Dockerfile.arm64" ] \
       && fail "Python service has Dockerfile.arm64 (WRONG): $name" || true
   elif [ -f "$svc/go.mod" ]; then
-    # Go services → Dockerfile.arm64
-    [ -f "$svc/Dockerfile.arm64" ] \
-      && pass "Go service uses Dockerfile.arm64: $name ✓" \
-      || fail "Go Dockerfile.arm64 MISSING: $name"
+    # Go services → Dockerfile (unified multi-arch — DEBT-001 resolved)
+    [ -f "$svc/Dockerfile" ] \
+      && pass "Go service uses Dockerfile: $name ✓" \
+      || fail "Go Dockerfile MISSING: $name"
   fi
 done
 
