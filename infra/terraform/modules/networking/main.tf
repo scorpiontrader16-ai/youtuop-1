@@ -1,12 +1,10 @@
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║  Full path: infra/terraform/modules/networking/main.tf           ║
 # ║  Fix NAT-SPOF: one NAT gateway per AZ instead of single NAT     ║
-# ║    Previous: single NAT in public[0] — entire cluster loses      ║
-# ║    egress if AZ-0 fails. In production with 3 AZs this is a     ║
-# ║    critical single point of failure.                              ║
-# ║    Fix: one EIP + one NAT per AZ, one route table per AZ.        ║
+# ║  Fix HIGH-03: VPC Flow Logs added to CloudWatch                  ║
+# ║    Financial platform requires network traffic logging for        ║
+# ║    incident investigation + PCI-DSS / SOC2 compliance.           ║
 # ╚══════════════════════════════════════════════════════════════════╝
-
 
 terraform {
   required_version = ">= 1.9.0"
@@ -55,10 +53,7 @@ resource "aws_internet_gateway" "main" {
   tags   = { Name = var.name }
 }
 
-# NAT-SPOF FIX: one EIP per AZ
-# Previous: single aws_eip.nat + single aws_nat_gateway.main in public[0].
-# If AZ-0 becomes unavailable, ALL private subnets lose internet egress.
-# Fix: count = length(var.public_subnets) — one NAT gateway per public subnet/AZ.
+# NAT-SPOF FIX: one EIP + one NAT per AZ.
 resource "aws_eip" "nat" {
   count      = length(var.public_subnets)
   domain     = "vpc"
@@ -74,8 +69,7 @@ resource "aws_nat_gateway" "main" {
   depends_on    = [aws_internet_gateway.main]
 }
 
-# NAT-SPOF FIX: one private route table per AZ, each pointing to its own NAT.
-# Previous: single route table shared across all AZs → single NAT dependency.
+# NAT-SPOF FIX: one private route table per AZ.
 resource "aws_route_table" "private" {
   count  = length(var.private_subnets)
   vpc_id = aws_vpc.main.id
@@ -99,7 +93,6 @@ resource "aws_route_table" "public" {
   tags = { Name = "${var.name}-public" }
 }
 
-# NAT-SPOF FIX: each private subnet gets its own route table
 resource "aws_route_table_association" "private" {
   count          = length(var.private_subnets)
   subnet_id      = aws_subnet.private[count.index].id
@@ -112,6 +105,67 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# ── VPC Flow Logs ─────────────────────────────────────────────────────────
+# HIGH-03 FIX: financial platform requires network traffic logging.
+# Without flow logs: no visibility into traffic patterns, impossible to
+# investigate security incidents, fails PCI-DSS requirement 10.2 and SOC2.
+# count gate: can be disabled for staging cost saving via enable_flow_logs = false.
+
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  count             = var.enable_flow_logs ? 1 : 0
+  name              = "/aws/vpc/flow-logs/${var.name}"
+  retention_in_days = var.flow_logs_retention_days
+  tags              = { Name = "${var.name}-flow-logs" }
+}
+
+resource "aws_iam_role" "vpc_flow_logs" {
+  count = var.enable_flow_logs ? 1 : 0
+  name  = "${var.name}-vpc-flow-logs"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "vpc-flow-logs.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = { Name = "${var.name}-flow-logs" }
+}
+
+resource "aws_iam_role_policy" "vpc_flow_logs" {
+  count = var.enable_flow_logs ? 1 : 0
+  name  = "${var.name}-vpc-flow-logs"
+  role  = aws_iam_role.vpc_flow_logs[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_flow_log" "main" {
+  count           = var.enable_flow_logs ? 1 : 0
+  vpc_id          = aws_vpc.main.id
+  traffic_type    = "ALL"
+  iam_role_arn    = aws_iam_role.vpc_flow_logs[0].arn
+  log_destination = aws_cloudwatch_log_group.vpc_flow_logs[0].arn
+
+  tags = { Name = "${var.name}-flow-logs" }
+}
+
+# ── Outputs ──────────────────────────────────────────────────────────────
 output "vpc_id" {
   value = aws_vpc.main.id
 }
