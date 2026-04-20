@@ -1,13 +1,13 @@
 # ╔════════════════════════════════════════════════════════════════════╗
 # ║  Full path: infra/terraform/environments/production/terraform.tfvars ║
 # ║  Fix F-TF18: every variable declared in variables.tf is listed    ║
-# ║  Fix F-TF01-B: added github_org + github_repo                     ║
+# ║  Fix MEDIUM-04: removed enable_mena_region (dead variable)        ║
+# ║  Fix MEDIUM-05: added results_sync lifecycle values               ║
 # ╚════════════════════════════════════════════════════════════════════╝
 
 aws_region         = "us-east-1"
 cluster_name       = "platform-prod"
 availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
-
 
 vpc_cidr        = "10.0.0.0/16"
 private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
@@ -25,13 +25,14 @@ github_org  = "scorpiontrader16-ai"
 github_repo = "AmniX-Finance"
 
 # ── RDS ───────────────────────────────────────────────────────────────────
-# Fix F-TF01-C: previously hardcoded in main.tf — now explicit in tfvars
 multi_az          = true
 postgres_instance = "db.r8g.large"
 
 # ── Account-Global Resources ──────────────────────────────────────────────
 create_account_global_resources = true
+cloudtrail_multi_region         = true
 
-# ── CloudTrail ───────────────────────────────────────────────────────────
-# H-03: production us-east-1 is the primary state — owns the multi-region trail
-cloudtrail_multi_region = true
+# ── Results Sync Lifecycle ────────────────────────────────────────────────
+results_sync_standard_ia_days = 30
+results_sync_glacier_days     = 90
+results_sync_expiration_days  = 365

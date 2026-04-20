@@ -2,6 +2,9 @@
 # ║  Full path: infra/terraform/environments/production/variables.tf ║
 # ║  Fix F-TF01: all hardcoded values from main.tf declared here     ║
 # ║  Fix F-TF01-B: added github_org + github_repo for cluster module ║
+# ║  Fix F-TF01-C: added multi_az + postgres_instance               ║
+# ║  Fix MEDIUM-04: removed enable_mena_region (dead variable)       ║
+# ║  Fix MEDIUM-05: added results_sync lifecycle variables            ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 variable "aws_region" {
@@ -80,36 +83,66 @@ variable "github_repo" {
 }
 
 # ── RDS ───────────────────────────────────────────────────────────────────
-# Fix F-TF01-C: extracted hardcoded multi_az = true from main.tf
 variable "multi_az" {
-  description = "Enable Multi-AZ for RDS. Default: true (production-safe). Must be explicit per environment."
+  description = "Enable Multi-AZ for RDS. Default: true (production-safe)."
   type        = bool
   default     = true
 }
 
-# Fix F-TF01-C: extracted hardcoded postgres_instance = db.r8g.large from main.tf
 variable "postgres_instance" {
-  description = "RDS instance class for production. Must be set explicitly — no default to force conscious choice."
+  description = "RDS instance class for production. No default — must be conscious choice."
   type        = string
 
   validation {
     condition     = can(regex("^db\\.(t[0-9]|r[0-9]|m[0-9])", var.postgres_instance))
-    error_message = "postgres_instance must be a valid RDS instance class (e.g. db.r8g.large, db.t4g.medium)."
+    error_message = "postgres_instance must be a valid RDS instance class (e.g. db.r8g.large)."
   }
 }
 
 # ── Account-Global Resources ──────────────────────────────────────────────
-# C-01/C-02: production us-east-1 is the primary state — it owns account-global resources.
 variable "create_account_global_resources" {
-  description = "Create account-global resources (GitHub OIDC + S3 account block). True for primary state."
+  description = "Create account-global resources (GitHub OIDC + S3 account block + GuardDuty). True for primary state only."
   type        = bool
   default     = true
 }
 
-# ── CloudTrail ───────────────────────────────────────────────────────────
-# H-03: production us-east-1 = primary state — owns the multi-region trail
 variable "cloudtrail_multi_region" {
   description = "Enable multi-region CloudTrail. True for primary state, false for secondary."
   type        = bool
   default     = true
+}
+
+# ── Results Sync Lifecycle ────────────────────────────────────────────────
+# MEDIUM-05: explicit retention policy — financial platform requires defined data lifecycle.
+variable "results_sync_standard_ia_days" {
+  description = "Days before transitioning results_sync objects to STANDARD_IA."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.results_sync_standard_ia_days >= 30
+    error_message = "results_sync_standard_ia_days must be >= 30 (AWS S3 minimum for STANDARD_IA)."
+  }
+}
+
+variable "results_sync_glacier_days" {
+  description = "Days before transitioning results_sync objects to GLACIER_IR."
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.results_sync_glacier_days > var.results_sync_standard_ia_days
+    error_message = "results_sync_glacier_days must be > results_sync_standard_ia_days."
+  }
+}
+
+variable "results_sync_expiration_days" {
+  description = "Days before expiring results_sync objects. Financial data retention: 365 days minimum."
+  type        = number
+  default     = 365
+
+  validation {
+    condition     = var.results_sync_expiration_days >= 365
+    error_message = "results_sync_expiration_days must be >= 365 for financial data compliance."
+  }
 }

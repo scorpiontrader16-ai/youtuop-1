@@ -2,6 +2,11 @@
 # ║  Full path: infra/terraform/environments/staging/terraform.tfvars║
 # ║  Fix F-TF18: every variable declared in variables.tf is listed   ║
 # ║  Fix F-TF01-B: added github_org + github_repo                    ║
+# ║  Fix F-TF01-C: multi_az explicit                                 ║
+# ║  Fix CRITICAL-03: create_account_global_resources = false        ║
+# ║    staging shares AWS account with production (same state bucket) ║
+# ║    production owns account-global resources to avoid conflict on  ║
+# ║    aws_s3_account_public_access_block + aws_guardduty_detector   ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 aws_region         = "us-east-1"
@@ -22,12 +27,15 @@ github_org  = "scorpiontrader16-ai"
 github_repo = "AmniX-Finance"
 
 # ── RDS ───────────────────────────────────────────────────────────────────
-# Fix F-TF01-C: multi_az was hardcoded false in main.tf — now explicit
 multi_az = false
 
 # ── Account-Global Resources ──────────────────────────────────────────────
-create_account_global_resources = true
+# CRITICAL-03 FIX: false — staging shares the same AWS account as production.
+# production state owns aws_s3_account_public_access_block + aws_guardduty_detector.
+# Two states owning the same account-level resource = apply conflict.
+create_account_global_resources = false
 
-# ── CloudTrail ───────────────────────────────────────────────────────────
-# H-03: staging is a separate account — owns its own multi-region trail
-cloudtrail_multi_region = true
+# ── CloudTrail ────────────────────────────────────────────────────────────
+# false — production already owns the multi-region trail covering us-east-1.
+# Two multi-region trails in the same account = duplicate logs + double cost.
+cloudtrail_multi_region = false

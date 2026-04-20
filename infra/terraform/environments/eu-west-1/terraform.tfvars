@@ -51,3 +51,8 @@ create_account_global_resources = false
 # ── CloudTrail ───────────────────────────────────────────────────────────
 # H-03: false — production us-east-1 trail already covers eu-west-1 events
 cloudtrail_multi_region = false
+
+# ── Results Sync Lifecycle ────────────────────────────────────────────────
+results_sync_standard_ia_days = 30
+results_sync_glacier_days     = 90
+results_sync_expiration_days  = 365

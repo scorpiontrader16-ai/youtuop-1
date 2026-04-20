@@ -154,3 +154,38 @@ variable "cloudtrail_multi_region" {
   type        = bool
   default     = false
 }
+
+# ── Results Sync Lifecycle ────────────────────────────────────────────────
+# MEDIUM-05: explicit retention policy for EU financial data.
+variable "results_sync_standard_ia_days" {
+  description = "Days before transitioning results_sync objects to STANDARD_IA."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.results_sync_standard_ia_days >= 30
+    error_message = "results_sync_standard_ia_days must be >= 30."
+  }
+}
+
+variable "results_sync_glacier_days" {
+  description = "Days before transitioning results_sync objects to GLACIER_IR."
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.results_sync_glacier_days > var.results_sync_standard_ia_days
+    error_message = "results_sync_glacier_days must be > results_sync_standard_ia_days."
+  }
+}
+
+variable "results_sync_expiration_days" {
+  description = "Days before expiring results_sync objects. Financial data: 365 days minimum."
+  type        = number
+  default     = 365
+
+  validation {
+    condition     = var.results_sync_expiration_days >= 365
+    error_message = "results_sync_expiration_days must be >= 365 for financial data compliance."
+  }
+}
