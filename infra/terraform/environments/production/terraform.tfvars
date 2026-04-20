@@ -36,3 +36,14 @@ cloudtrail_multi_region         = true
 results_sync_standard_ia_days = 30
 results_sync_glacier_days     = 90
 results_sync_expiration_days  = 365
+
+# ── Route53 DR Failover ───────────────────────────────────────────────────
+# REQUIRED: fill after ingress controller deploy in both clusters.
+# kubectl get svc -n ingress-nginx --context <primary-cluster>
+# kubectl get svc -n ingress-nginx --context <dr-cluster>
+domain_name        = "amnixfinance.com"
+primary_lb_dns     = "REPLACE_WITH_PRIMARY_ALB_DNS"
+primary_lb_zone_id = "REPLACE_WITH_PRIMARY_ALB_ZONE_ID"
+dr_lb_dns          = "REPLACE_WITH_DR_ALB_DNS"
+dr_lb_zone_id      = "REPLACE_WITH_DR_ALB_ZONE_ID"
+sns_alarm_arn      = ""

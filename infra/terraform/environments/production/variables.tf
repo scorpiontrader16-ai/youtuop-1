@@ -146,3 +146,39 @@ variable "results_sync_expiration_days" {
     error_message = "results_sync_expiration_days must be >= 365 for financial data compliance."
   }
 }
+
+# ── Route53 DR Failover ───────────────────────────────────────────────────
+# These variables are populated after ingress controller is deployed in both clusters.
+# Run: kubectl get svc -n ingress-nginx to get LB DNS names.
+
+variable "domain_name" {
+  description = "Root domain name for Route53 hosted zone (e.g. amnixfinance.com)."
+  type        = string
+  default     = "amnixfinance.com"
+}
+
+variable "primary_lb_dns" {
+  description = "DNS name of the primary ALB (us-east-1). Set after ingress controller deploy."
+  type        = string
+}
+
+variable "primary_lb_zone_id" {
+  description = "Hosted zone ID of the primary ALB (us-east-1). Get from: aws elbv2 describe-load-balancers."
+  type        = string
+}
+
+variable "dr_lb_dns" {
+  description = "DNS name of the DR ALB (eu-west-1). Set after ingress controller deploy in DR cluster."
+  type        = string
+}
+
+variable "dr_lb_zone_id" {
+  description = "Hosted zone ID of the DR ALB (eu-west-1)."
+  type        = string
+}
+
+variable "sns_alarm_arn" {
+  description = "SNS topic ARN for DR health check alerts (platform-dr-alerts). Leave empty to skip alarm."
+  type        = string
+  default     = ""
+}

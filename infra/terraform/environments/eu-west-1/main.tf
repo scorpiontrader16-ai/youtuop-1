@@ -41,6 +41,25 @@ provider "aws" {
   }
 }
 
+
+# ── Helm Provider ─────────────────────────────────────────────────────────
+# Required by cluster module (cert-manager + external-secrets helm_release).
+# Uses EKS exec plugin — requires aws CLI in CI/CD execution environment.
+# Two-phase apply: see infra/terraform/environments/APPLY_ORDER.md
+provider "helm" {
+  kubernetes {
+    host                   = module.cluster.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.cluster.cluster_ca_data)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", var.cluster_name, "--region", var.aws_region]
+    }
+  }
+}
+
+provider "tls" {}
+
 # ── VPC ──────────────────────────────────────────────────────────────────
 module "vpc" {
   source          = "../../modules/networking"

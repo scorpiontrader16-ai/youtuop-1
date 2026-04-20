@@ -40,6 +40,25 @@ provider "aws" {
   }
 }
 
+
+# ── Helm Provider ─────────────────────────────────────────────────────────
+# Required by cluster module (cert-manager + external-secrets helm_release).
+# Uses EKS exec plugin — requires aws CLI in CI/CD execution environment.
+# Two-phase apply: see infra/terraform/environments/APPLY_ORDER.md
+provider "helm" {
+  kubernetes {
+    host                   = module.cluster.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.cluster.cluster_ca_data)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", var.cluster_name, "--region", var.aws_region]
+    }
+  }
+}
+
+provider "tls" {}
+
 # ── VPC ──────────────────────────────────────────────────────────────────
 module "vpc" {
   source          = "../../modules/networking"
@@ -169,6 +188,38 @@ resource "aws_s3_bucket_lifecycle_configuration" "results_sync" {
   depends_on = [aws_s3_bucket_versioning.results_sync]
 }
 
+
+# ── Route53 — DR Health Check + Failover ─────────────────────────────────
+# Provides automatic DNS failover between us-east-1 (primary) and eu-west-1 (DR).
+# Outputs: health_check_id, hosted_zone_id → used in RUNBOOK.md Phase 1 + Phase 4.
+# Prerequisites: deploy ingress controller in both clusters first to get LB DNS names.
+module "route53" {
+  source = "../../modules/route53"
+
+  domain_name        = var.domain_name
+  primary_lb_dns     = var.primary_lb_dns
+  primary_lb_zone_id = var.primary_lb_zone_id
+  dr_lb_dns          = var.dr_lb_dns
+  dr_lb_zone_id      = var.dr_lb_zone_id
+  sns_alarm_arn      = var.sns_alarm_arn
+  environment        = "production"
+}
+
+# ── Route53 Outputs — populate RUNBOOK.md variables ──────────────────────
+output "health_check_id" {
+  value       = module.route53.health_check_id
+  description = "RUNBOOK: export HEALTH_CHECK_ID=$(terraform output -raw health_check_id)"
+}
+
+output "hosted_zone_id" {
+  value       = module.route53.hosted_zone_id
+  description = "RUNBOOK: export HOSTED_ZONE_ID=$(terraform output -raw hosted_zone_id)"
+}
+
+output "api_fqdn" {
+  value       = module.route53.api_fqdn
+  description = "Fully qualified API endpoint (e.g. api.amnixfinance.com)."
+}
 # ── Outputs ───────────────────────────────────────────────────────────────
 output "eso_role_arn" {
   value = module.vault.eso_role_arn

@@ -38,6 +38,25 @@ Primary (us-east-1)               DR (eu-west-1)
 
 ---
 
+## قبل تشغيل الـ Runbook — استخرج المتغيرات
+
+```bash
+cd infra/terraform/environments/production
+
+export HEALTH_CHECK_ID=$(terraform output -raw health_check_id)
+export HOSTED_ZONE_ID=$(terraform output -raw hosted_zone_id)
+export DR_KUBECONFIG="$HOME/.kube/platform-eu"
+export DR_LB_DNS=$(grep dr_lb_dns terraform.tfvars | awk -F'"' '{print $2}')
+export DR_LB_ZONE_ID=$(grep dr_lb_zone_id terraform.tfvars | awk -F'"' '{print $2}')
+
+echo "HEALTH_CHECK_ID=$HEALTH_CHECK_ID"
+echo "HOSTED_ZONE_ID=$HOSTED_ZONE_ID"
+echo "DR_LB_DNS=$DR_LB_DNS"
+echo "DR_LB_ZONE_ID=$DR_LB_ZONE_ID"
+```
+
+---
+
 ## Failover Procedure
 
 ### Phase 1 — Assessment (0–30 min)
