@@ -6,6 +6,7 @@ WORKDIR /repo
 COPY go.mod go.sum ./
 COPY services/ingestion/ ./services/ingestion/
 COPY gen/ ./gen/
+COPY internal/ ./internal/
 WORKDIR /repo/services/ingestion
 RUN go mod download && go mod verify
 RUN go mod tidy && \

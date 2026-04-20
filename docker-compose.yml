@@ -230,8 +230,8 @@ services:
   # ─────────────────────────────────────────────────────────
   ingestion:
     build:
-      context: ./services/ingestion
-      dockerfile: Dockerfile.arm64
+      context: .
+      dockerfile: services/ingestion/Dockerfile.arm64
     container_name: ingestion
     ports:
       - "8090:8090"   # gRPC
@@ -268,8 +268,8 @@ services:
   # ─────────────────────────────────────────────────────────
   processing:
     build:
-      context: ./services/processing
-      dockerfile: Dockerfile.arm64
+      context: .
+      dockerfile: services/processing/Dockerfile.arm64
     container_name: processing
     ports:
       - "50051:50051"  # gRPC
