@@ -1,11 +1,17 @@
 # ╔══════════════════════════════════════════════════════════════════════╗
 # ║  Full path: infra/argocd/applicationsets/platform-appset.yaml       ║
-# ║  Status: 🆕 New — GAP-01 Step 3                                     ║
+# ║  Status: ✏️  Modified — F-ARGO07: exclude ingestion+processing      ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 #
 # ─────────────────────────────────────────────────────────────────────────────
-# يُدير جميع الـ 15 platform service في بيئة production
+# يُدير جميع الـ 14 platform service في بيئة production
 # كل service يصبح Application منفصل باسم: {service}-prod
+#
+# EXCLUDED — ingestion + processing:
+#   مُدارَان كـ standalone Applications في applications.yaml (wave 1).
+#   السبب: تضمينهم هنا يُنشئ resource ownership conflict — ArgoCD يرفض
+#   تطبيق resources مُدارة بـ Application آخر ويرفع ComparisonError.
+#   كل منهما يحتاج ignoreDifferences مستقل لحماية KEDA-managed replicas.
 #
 # الـ image tag يتحدث تلقائياً من:
 #   .github/workflows/release.yml → يعدّل newTag في overlay kustomization.yaml
@@ -24,7 +30,9 @@ metadata:
     app.kubernetes.io/managed-by: argocd
     app.kubernetes.io/part-of: youtuop-platform
 spec:
-  # ─── Generator — List of all 15 services ─────────────────────────────────
+  # ─── Generator — List of all 14 services ─────────────────────────────────
+  # NOTE: ingestion and processing are intentionally absent.
+  # They are declared as standalone Applications in applications.yaml.
   generators:
     - list:
         elements:
@@ -59,10 +67,6 @@ spec:
           # ── Data Pipeline ───────────────────────────────────────────────
           - service: data-quality
             wave: "2"
-          - service: ingestion
-            wave: "2"
-          - service: processing
-            wave: "2"
           # ── AI / ML ─────────────────────────────────────────────────────
           - service: ml-engine
             wave: "3"
@@ -70,11 +74,9 @@ spec:
   # ─── Template — Applied to every element ─────────────────────────────────
   template:
     metadata:
-      # اسم فريد لكل service — لا يتعارض مع applications.yaml
       name: "{{service}}-prod"
       namespace: argocd
       annotations:
-        # wave مُعرَّف per-service في الـ generator
         argocd.argoproj.io/sync-wave: "{{wave}}"
         notifications.argoproj.io/subscribe.on-sync-failed.slack: alerts-deploy
         notifications.argoproj.io/subscribe.on-health-degraded.slack: alerts-critical
@@ -124,6 +126,5 @@ spec:
 
   # ─── Sync Policy للـ ApplicationSet نفسه ─────────────────────────────────
   syncPolicy:
-    # حذف الـ Application تلقائياً لو حُذف من الـ list
     applicationsSync: sync
     preserveResourcesOnDeletion: false
