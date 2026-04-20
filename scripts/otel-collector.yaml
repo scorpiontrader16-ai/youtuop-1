@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # OpenTelemetry Collector — Local Development
-# Pipeline: Traces→Tempo | Metrics→Prometheus+Mimir | Logs→Loki
+# Pipeline: Traces→debug | Metrics→prometheus | Logs→debug
 # ─────────────────────────────────────────────────────────────────────────────
 
 receivers:
@@ -47,24 +47,9 @@ processors:
 exporters:
   debug:
     verbosity: basic
-  otlp/tempo:
-    endpoint: tempo:4317
-    tls:
-      insecure: true
-  loki:
-    endpoint: http://loki:3100/loki/api/v1/push
-    default_labels_enabled:
-      exporter: false
-      job: true
-      instance: true
-      level: true
   prometheus:
     endpoint: 0.0.0.0:8889
     namespace: otelcol
-  prometheusremotewrite/mimir:
-    endpoint: http://mimir:9009/api/v1/push
-    tls:
-      insecure: true
 
 extensions:
   health_check:
@@ -78,12 +63,12 @@ service:
     traces:
       receivers:  [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters:  [otlp/tempo, debug]
+      exporters:  [debug]
     metrics:
       receivers:  [otlp, prometheus]
       processors: [memory_limiter, resource, batch]
-      exporters:  [prometheus, prometheusremotewrite/mimir]
+      exporters:  [prometheus]
     logs:
       receivers:  [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters:  [loki, debug]
+      exporters:  [debug]
