@@ -105,7 +105,7 @@ jobs:
             ${{ env.REPO }}/ingestion@${{ steps.build-ingestion.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Ingestion
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-ingestion.spdx.json
           fail-build: false
@@ -200,7 +200,7 @@ jobs:
             ${{ env.REPO }}/processing@${{ steps.build-processing.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Processing
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-processing.spdx.json
           fail-build: false
@@ -295,7 +295,7 @@ jobs:
             ${{ env.REPO }}/auth@${{ steps.build-auth.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Auth
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-auth.spdx.json
           fail-build: false
@@ -390,7 +390,7 @@ jobs:
             ${{ env.REPO }}/billing@${{ steps.build-billing.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Billing
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-billing.spdx.json
           fail-build: false
@@ -485,7 +485,7 @@ jobs:
             ${{ env.REPO }}/notifications@${{ steps.build-notifications.outputs.digest }}
 
       - name: Scan SBOM for vulnerabilities — Notifications
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-notifications.spdx.json
           fail-build: false
@@ -570,7 +570,7 @@ jobs:
             --sbom sbom-analytics.spdx.json \
             ${{ env.REPO }}/analytics@${{ steps.build-analytics.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Analytics
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-analytics.spdx.json
           fail-build: false
@@ -653,7 +653,7 @@ jobs:
             --sbom sbom-control-plane.spdx.json \
             ${{ env.REPO }}/control-plane@${{ steps.build-control-plane.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Control-Plane
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-control-plane.spdx.json
           fail-build: false
@@ -736,7 +736,7 @@ jobs:
             --sbom sbom-developer-portal.spdx.json \
             ${{ env.REPO }}/developer-portal@${{ steps.build-developer-portal.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Developer-Portal
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-developer-portal.spdx.json
           fail-build: false
@@ -819,7 +819,7 @@ jobs:
             --sbom sbom-feature-flags.spdx.json \
             ${{ env.REPO }}/feature-flags@${{ steps.build-feature-flags.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Feature-Flags
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-feature-flags.spdx.json
           fail-build: false
@@ -903,7 +903,7 @@ jobs:
             --sbom sbom-jobs.spdx.json \
             ${{ env.REPO }}/jobs@${{ steps.build-jobs.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Jobs
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-jobs.spdx.json
           fail-build: false
@@ -987,7 +987,7 @@ jobs:
             --sbom sbom-realtime.spdx.json \
             ${{ env.REPO }}/realtime@${{ steps.build-realtime.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Realtime
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-realtime.spdx.json
           fail-build: false
@@ -1071,7 +1071,7 @@ jobs:
             --sbom sbom-search.spdx.json \
             ${{ env.REPO }}/search@${{ steps.build-search.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Search
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-search.spdx.json
           fail-build: false
@@ -1154,7 +1154,7 @@ jobs:
             --sbom sbom-tenant-operator.spdx.json \
             ${{ env.REPO }}/tenant-operator@${{ steps.build-tenant-operator.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Tenant-Operator
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-tenant-operator.spdx.json
           fail-build: false
@@ -1237,7 +1237,7 @@ jobs:
             --sbom sbom-ml-engine.spdx.json \
             ${{ env.REPO }}/ml-engine@${{ steps.build-ml-engine.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — ML-Engine
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-ml-engine.spdx.json
           fail-build: false
@@ -1321,7 +1321,7 @@ jobs:
             --sbom sbom-data-quality.spdx.json \
             ${{ env.REPO }}/data-quality@${{ steps.build-data-quality.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Data Quality
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-data-quality.spdx.json
           fail-build: false
@@ -1405,7 +1405,7 @@ jobs:
             --sbom sbom-hydration.spdx.json \
             ${{ env.REPO }}/hydration@${{ steps.build-hydration.outputs.digest }}
       - name: Scan SBOM for vulnerabilities — Hydration
-        uses: anchore/scan-action@3343887d815d7b07465f6fdcd395bd66508d486a  # v3
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         with:
           sbom: sbom-hydration.spdx.json
           fail-build: false
