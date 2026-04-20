@@ -112,3 +112,17 @@ variable "tiered_storage_glacier_days" {
     error_message = "tiered_storage_glacier_days must be greater than tiered_storage_standard_ia_days."
   }
 }
+
+# ── MirrorMaker2 Subnet ───────────────────────────────────────────────────
+# MEDIUM-03 FIX: extracted hardcoded [0] index to variable.
+# Change to 1 or 2 if AZ-0 is degraded — no code change required.
+variable "mirrormaker_subnet_index" {
+  type        = number
+  default     = 0
+  description = "Index of private_subnet_ids to deploy MirrorMaker2 into. Default: 0 (AZ-0). Change if AZ-0 is degraded."
+
+  validation {
+    condition     = var.mirrormaker_subnet_index >= 0
+    error_message = "mirrormaker_subnet_index must be >= 0."
+  }
+}

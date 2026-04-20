@@ -2,12 +2,15 @@
 # ║  Full path: infra/terraform/modules/redpanda/main.tf             ║
 # ║  Fix SG-BUG: replaced 10.0.0.0/8 with var.vpc_cidr              ║
 # ║  Fix F-TF01-B: mirrormaker instance_type + volume sizes → var.*  ║
+# ║  Fix HIGH-02: egress split — VPC internal + HTTPS for S3 only    ║
+# ║    was: egress 0.0.0.0/0 all protocols (data exfil risk)         ║
+# ║    now: egress vpc_cidr all + 0.0.0.0/0 HTTPS only for S3 APIs  ║
+# ║  Fix MEDIUM-03: mirrormaker2 subnet_id uses variable index       ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 terraform {
   required_version = ">= 1.9.0"
 }
-
 
 # ── S3 Tiered Storage ────────────────────────────────────────────────────
 resource "aws_s3_bucket" "tiered" {
@@ -40,8 +43,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "tiered" {
 }
 
 # ── Security Group ───────────────────────────────────────────────────────
-# SG-BUG FIX: was ["10.0.0.0/8"] — a supernet covering all RFC-1918 10.x space.
-# Replaced with var.vpc_cidr — scoped to this VPC only.
 resource "aws_security_group" "redpanda" {
   name        = "${var.cluster_name}-redpanda"
   description = "Redpanda broker access — restricted to VPC CIDR only"
@@ -79,10 +80,25 @@ resource "aws_security_group" "redpanda" {
     self        = true
   }
 
+  # HIGH-02 FIX: split egress into two scoped rules.
+  # Previous: single rule cidr_blocks=["0.0.0.0/0"] all protocols = data exfil risk.
+  # Rule 1: internal VPC traffic for Multi-AZ replication and inter-service comms.
   egress {
+    description = "Internal VPC traffic — replication and inter-service"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Rule 2: HTTPS only to public internet for S3 tiered storage and AWS APIs.
+  # Redpanda brokers must reach S3 for tiered storage writes.
+  # Scope: port 443 only — no other protocol can leave the VPC.
+  egress {
+    description = "HTTPS to AWS S3 and APIs for tiered storage"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -147,7 +163,6 @@ data "aws_ami" "redpanda" {
 data "aws_region" "current" {}
 
 # ── EC2 Instances — Redpanda Brokers ─────────────────────────────────────
-# F-TF01-B: broker_volume_size extracted to variable
 resource "aws_instance" "redpanda" {
   count = var.broker_count
 
@@ -185,12 +200,13 @@ resource "aws_instance" "redpanda" {
 }
 
 # ── MirrorMaker 2 Instance — Cross-Region Sync ───────────────────────────
-# F-TF01-B: instance_type + volume_size extracted to variables
+# MEDIUM-03 FIX: subnet_id uses var.mirrormaker_subnet_index instead of hardcoded [0].
+# Allows failover to a different AZ if AZ-0 is degraded without code change.
 resource "aws_instance" "mirrormaker2" {
   ami           = data.aws_ami.redpanda.id
   instance_type = var.mirrormaker_instance_type
 
-  subnet_id              = var.private_subnet_ids[0]
+  subnet_id              = var.private_subnet_ids[var.mirrormaker_subnet_index % length(var.private_subnet_ids)]
   vpc_security_group_ids = [aws_security_group.redpanda.id]
   iam_instance_profile   = aws_iam_instance_profile.redpanda.name
 
